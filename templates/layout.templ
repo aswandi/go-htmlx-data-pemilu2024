@@ -1,0 +1,70 @@
+package templates
+
+templ Layout(title string) {
+	<!DOCTYPE html>
+	<html lang="id">
+		<head>
+			<meta charset="UTF-8"/>
+			<meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+			<title>{ title } - Database Pemilu 2024</title>
+			<script src="https://cdn.tailwindcss.com"></script>
+			<script src="https://unpkg.com/htmx.org@2.0.4"></script>
+			<style>
+				@keyframes slideIn {
+					from {
+						opacity: 0;
+						transform: translateY(20px);
+					}
+					to {
+						opacity: 1;
+						transform: translateY(0);
+					}
+				}
+				.animate-slide-in {
+					animation: slideIn 0.5s ease-out;
+				}
+				.card-hover {
+					transition: all 0.3s ease;
+				}
+				.card-hover:hover {
+					transform: translateY(-4px);
+					box-shadow: 0 20px 25px -5px rgb(0 0 0 / 0.1), 0 8px 10px -6px rgb(0 0 0 / 0.1);
+				}
+			</style>
+		</head>
+		<body class="bg-gradient-to-br from-blue-50 via-white to-purple-50 min-h-screen">
+			<nav class="bg-white shadow-lg border-b-4 border-blue-500">
+				<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+					<div class="flex justify-between h-16">
+						<div class="flex items-center">
+							<h1 class="text-2xl font-bold bg-gradient-to-r from-blue-600 to-purple-600 bg-clip-text text-transparent">
+								DATABASE PEMILU 2024
+							</h1>
+						</div>
+						<div class="flex items-center">
+							<span class="text-sm text-gray-600">Sistem Informasi Pemilihan Umum Indonesia</span>
+						</div>
+					</div>
+				</div>
+			</nav>
+			<main class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+				{ children... }
+			</main>
+			<footer class="bg-white border-t border-gray-200 mt-12">
+				<div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-6">
+					<div class="flex flex-col md:flex-row justify-between items-center space-y-4 md:space-y-0">
+						<p class="text-center md:text-left text-gray-600 text-sm">
+							© 2024 Database Pemilu Indonesia. All rights reserved. <br class="md:hidden"/>
+							Developed by <a href="https://aswandi.or.id" target="_blank" class="text-blue-600 hover:text-blue-800 font-medium transition-colors">aswandi.or.id</a>
+						</p>
+						<div class="flex space-x-4">
+							<a href="/changelog" class="text-gray-600 hover:text-blue-600 text-sm transition-colors">
+								Changelog
+							</a>
+						</div>
+					</div>
+				</div>
+			</footer>
+		</body>
+	</html>
+}

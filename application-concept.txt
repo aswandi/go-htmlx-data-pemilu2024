@@ -1,0 +1,62 @@
+Buatkan aplikasi web dengan menggunakan Go + Templ + Tailwind CSS + HTMX
+buat tampilan yang menarik, tampilan terang, modern ,Responsif, ada animasi di setiap kartu dan tabel dan section.
+
+DB_CONNECTION=mysql
+DB_HOST=127.0.0.1
+DB_PORT=3306
+DB_DATABASE=pileg2024
+DB_USERNAME=root
+DB_PASSWORD=StrongPassword123!
+
+
+
+Nama aplikasi DATABASE PEMILU 2024
+
+Tampilan pertama yang perlu dibuat adalah halaman data wilayah Indonesia yang dimulai dari data provinsi yang diambil dari tabel pdpr_wil_pro
+Tabelnya berisi kolom : NO, NAMA PROVINSI, JUMLAH DAPIL, JUMLAH KABUPATEN/KOTA, JUMLAH TPS, JUMLAH DPT
+
+Data dapil bisa di lihat di tabel pdpr_wil_dapil, data lain bisa lihat di tabel ini
+pdpr_wil_dapil
+pdpr_wil_kab
+pdpr_wil_kec
+pdpr_wil_kel
+pdpr_wil_pro
+pdpr_wil_tps
+
+Di server database sudah ada skema database aplikasi pemilihan umum di Indonesia untuk seluruh wilayah mulai dari tingkat provinsi kabupaten, Kecamatan, Kelurahan, sampai TPS. dan ada  5 jenis pemilihan yaitu pemilihan presiden , pemilihan DPD, pemilihan DPR RI, Pemilihan DPRD provinsi dan pemilihan DPRD kabupaten kota
+
+Untuk pemilihan presiden itu tingkatannya mulai level nasional lalu di bawahnya tingkat provinsi yang ada di bawahnya tingkat kabupaten kota lalu di bawahnya tingkat kecamatan lalu dibawahnya tingkat Kelurahan dan terakhir level TPS
+
+Untuk tingkat pemilihan DPD Maka setiap provinsi akan dipilih anggota DPD sebanyak 4 orang dan pemilihannya juga sampai level TPS
+
+ untuk tingkat DPR RI maka bisa setiap provinsi itu beragam daerah pemilihan atau Dapil ada yang satu provinsi hanya satu Dapil dan ada yang lebih dari satu Dapil jadi untuk lebih dari satu Dapil maka Dapil dibagi berdasarkan Kabupaten jadi ada satu Dapil hanya satu kabupaten ada juga satu Dapil bisa lebih dari satu kabupaten di provinsi tersebut
+
+ untuk tingkat DPRD provinsi maka ada pembagian Dapil atau daerah pemilihan, Ada Dapil yang hanya satu kabupaten dan ada juga Dapil yang lebih dari satu kabupaten
+
+Untuk tingkat DPRD kabupaten kota maka di setiap Kabupaten ada beberapa Dapil dan setiap Dapil itu ada beberapa Kecamatan
+
+DATA NAMA CALEG : 
+-  DPD :  tabel dpd_caleg 
+- Dpr_ri  : dpr_ri_caleg
+- DPRD provinsi : dprd_pro_caleg 
+- DPRD KABUPATEN KOTA : dprd_kab_caleg
+
+DATA PEMBAGIAN DAPIL
+Ada di tabel dengan prefix *wil*
+
+Penjelasan prefix
+Hs : hitung suara
+Hr : hitung rekapitulasi
+Pdpr : pemilihan DPR RI
+Pdprdp : Pemilihan DPRD tingkat provinsi
+Pdprdk : pemilihan DPRDK khusus provinsi aceh saja
+Dprd_kab : dprd kabupaten/kota
+Pilpres : pemilihan presiden
+Kab: kabupaten
+Kec :kecamatan
+Kel:kelurahan
+Pro: provinsi
+Nas:nasional
+Dapil:daerah pemilihan
+Ppwp : pemilihan presiden dan wakil presiden
+Wil: wilayah

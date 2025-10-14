@@ -1,0 +1,180 @@
+package templates
+
+import (
+	"datapemilu2024/internal/models"
+	"fmt"
+)
+
+templ ProvincePage(provinces []models.Province) {
+	@Layout("Data Provinsi") {
+		<div class="animate-slide-in">
+			<div class="mb-8">
+				<h2 class="text-3xl font-bold text-gray-800 mb-2">Data Wilayah Provinsi Indonesia</h2>
+				<p class="text-gray-600">Informasi lengkap daerah pemilihan, kabupaten/kota, TPS, dan DPT per provinsi</p>
+			</div>
+			<div class="bg-white rounded-2xl shadow-xl overflow-hidden card-hover">
+				<div class="overflow-x-auto">
+					<table class="min-w-full divide-y divide-gray-200">
+						<thead class="bg-gradient-to-r from-blue-600 to-purple-600">
+							<tr>
+								<th class="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">
+									No
+								</th>
+								<th class="px-6 py-4 text-left text-xs font-bold text-white uppercase tracking-wider">
+									Nama Provinsi
+								</th>
+								<th class="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">
+									Jumlah Dapil
+								</th>
+								<th class="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">
+									Jumlah Kab/Kota
+								</th>
+								<th class="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">
+									Jumlah TPS
+								</th>
+								<th class="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">
+									Jumlah DPT
+								</th>
+								<th class="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">
+									Data Perdesa
+						</th>
+						<th class="px-6 py-4 text-center text-xs font-bold text-white uppercase tracking-wider">
+							DATA SUARA TPS
+								</th>
+							</tr>
+						</thead>
+						<tbody class="bg-white divide-y divide-gray-200">
+							for i, prov := range provinces {
+								<tr class="hover:bg-blue-50 transition-colors duration-200">
+									<td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+										{ fmt.Sprintf("%d", i+1) }
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap">
+										<a href={ templ.SafeURL(fmt.Sprintf("/provinsi/%s", prov.Code)) } class="group">
+											<div class="text-sm font-semibold text-blue-600 group-hover:text-blue-800 group-hover:underline">{ prov.Name }</div>
+											<div class="text-xs text-gray-500">Kode: { prov.Code }</div>
+										</a>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-center">
+										<a href={ templ.SafeURL(fmt.Sprintf("/dapil/%s", prov.Code)) } class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-blue-100 text-blue-800 hover:bg-blue-200 transition-colors cursor-pointer">
+											{ fmt.Sprintf("%d", prov.JumlahDapil) }
+										</a>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-center">
+										<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-green-100 text-green-800">
+											{ fmt.Sprintf("%d", prov.JumlahKabKota) }
+										</span>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-center">
+										<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-purple-100 text-purple-800">
+											{ fmt.Sprintf("%d", prov.JumlahTPS) }
+										</span>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-center">
+										<span class="inline-flex items-center px-3 py-1 rounded-full text-sm font-medium bg-orange-100 text-orange-800">
+											{ fmt.Sprintf("%s", formatNumber(prov.JumlahDPT)) }
+										</span>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-center">
+										<div class="flex flex-wrap gap-1 justify-center">
+										<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/pilpres/%s", prov.Code)) }
+										   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors">
+											PILPRES
+										</a>
+										<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dpd/%s", prov.Code)) }
+										   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors">
+											DPD
+										</a>
+										<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-partai/%s", prov.Code)) }
+										   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors">
+											DPR RI PARTAI
+										</a>
+										<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-caleg/%s", prov.Code)) }
+										   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded transition-colors">
+											DPR RI CALEG
+										</a>
+										<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dprd-prov-partai/%s", prov.Code)) }
+										   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-indigo-600 hover:bg-indigo-700 rounded transition-colors">
+											DPRD PROV PARTAI
+										</a>
+										<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dprd-prov-caleg/%s", prov.Code)) }
+										   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors">
+											DPRD PROV CALEG
+										</a>
+									</div>
+									</td>
+									<td class="px-6 py-4 whitespace-nowrap text-center">
+										<div class="flex flex-wrap gap-1 justify-center">
+											<a href="#"
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
+											   title="Belum tersedia">
+												PILPRES
+											</a>
+											<a href="#"
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
+											   title="Belum tersedia">
+												DPD
+											</a>
+											<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-partai-tps/%s", prov.Code)) }
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors">
+												DPR RI PARTAI
+											</a>
+											<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-caleg-tps/%s", prov.Code)) }
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded transition-colors">
+												DPR RI CALEG
+											</a>
+											<a href="#"
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
+											   title="Belum tersedia">
+												DPRD PROV PARTAI
+											</a>
+											<a href="#"
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
+											   title="Belum tersedia">
+												DPRD PROV CALEG
+											</a>
+											<a href="#"
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
+											   title="Belum tersedia">
+												DPRD KABKOTA PARTAI
+											</a>
+											<a href="#"
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
+											   title="Belum tersedia">
+												DPRD KABKOTA CALEG
+											</a>
+										</div>
+									</td>
+								</tr>
+							}
+						</tbody>
+					</table>
+				</div>
+			</div>
+			<div class="mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg">
+				<div class="flex">
+					<div class="flex-shrink-0">
+						<svg class="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 20 20">
+							<path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd"></path>
+						</svg>
+					</div>
+					<div class="ml-3">
+						<p class="text-sm text-blue-700">
+							<strong>Total Provinsi:</strong> { fmt.Sprintf("%d provinsi", len(provinces)) }
+						</p>
+					</div>
+				</div>
+			</div>
+		</div>
+	}
+}
+
+func formatNumber(n int) string {
+	if n < 1000 {
+		return fmt.Sprintf("%d", n)
+	}
+	if n < 1000000 {
+		return fmt.Sprintf("%.1f rb", float64(n)/1000)
+	}
+	return fmt.Sprintf("%.2f jt", float64(n)/1000000)
+}
