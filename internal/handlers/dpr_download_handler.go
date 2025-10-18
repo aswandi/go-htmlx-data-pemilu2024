@@ -20,33 +20,327 @@ func NewDPRDownloadHandler(db *sql.DB) *DPRDownloadHandler {
 	return &DPRDownloadHandler{db: db}
 }
 
+// DownloadDPRDKabCalegByProvince handles Excel download for DPRD Kab caleg data by province (multi-sheet per dapil)
+func (h *DPRDownloadHandler) DownloadDPRDKabCalegByProvince(c echo.Context) error {
+	proKode := c.Param("id")
+
+	// Get province info
+	var proID, proNama string
+	err := h.db.QueryRow("SELECT pro_id, pro_nama FROM pdpr_wil_pro WHERE pro_kode = ?", proKode).Scan(&proID, &proNama)
+	if err != nil {
+		return c.String(http.StatusNotFound, "Provinsi tidak ditemukan")
+	}
+
+	// Get all dapils in this province from hr_dprd_kab_kec
+	dapilQuery := `
+		SELECT DISTINCT dapil_kode, dapil_nama, kab_kode, kab_nama
+		FROM hr_dprd_kab_kec
+		WHERE pro_kode = ?
+		ORDER BY dapil_kode
+	`
+	dapilRows, err := h.db.Query(dapilQuery, proKode)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error querying dapil data")
+	}
+	defer dapilRows.Close()
+
+	type DapilInfo struct {
+		DapilKode string
+		DapilNama string
+		KabKode   string
+		KabNama   string
+	}
+
+	var dapilList []DapilInfo
+	for dapilRows.Next() {
+		var d DapilInfo
+		if err := dapilRows.Scan(&d.DapilKode, &d.DapilNama, &d.KabKode, &d.KabNama); err != nil {
+			continue
+		}
+		dapilList = append(dapilList, d)
+	}
+
+	if len(dapilList) == 0 {
+		return c.String(http.StatusNotFound, "Tidak ada data dapil untuk provinsi ini")
+	}
+
+	// Create Excel file
+	f := excelize.NewFile()
+
+	// Process each dapil
+	firstSheet := true
+	for _, dapil := range dapilList {
+		// Sanitize sheet name (max 31 chars, no special chars)
+		sheetName := sanitizeSheetName(dapil.DapilNama)
+
+		if firstSheet {
+			// Rename Sheet1 to first dapil name
+			f.SetSheetName("Sheet1", sheetName)
+			firstSheet = false
+		} else {
+			_, err := f.NewSheet(sheetName)
+			if err != nil {
+				continue
+			}
+		}
+
+		// Get kecamatan data for this dapil
+		kecQuery := `
+			SELECT DISTINCT
+				kec_kode, kec_nama, kab_kode, kab_nama
+			FROM hr_dprd_kab_kec
+			WHERE dapil_kode = ? AND pro_kode = ?
+			ORDER BY kec_kode
+		`
+		kecRows, err := h.db.Query(kecQuery, dapil.DapilKode, proKode)
+		if err != nil {
+			continue
+		}
+
+		type KecInfo struct {
+			KecKode string
+			KecNama string
+			KabKode string
+			KabNama string
+		}
+
+		var kecList []KecInfo
+		for kecRows.Next() {
+			var k KecInfo
+			if err := kecRows.Scan(&k.KecKode, &k.KecNama, &k.KabKode, &k.KabNama); err != nil {
+				continue
+			}
+			kecList = append(kecList, k)
+		}
+		kecRows.Close()
+
+		// Get caleg list for this dapil
+		calegQuery := `
+			SELECT id, nama, nomor_urut, partai_id
+			FROM dprd_kab_caleg
+			WHERE dapil_kode = ?
+			ORDER BY nomor_urut
+		`
+		calegRows, err := h.db.Query(calegQuery, dapil.DapilKode)
+		if err != nil {
+			continue
+		}
+
+		type Caleg struct {
+			ID        string
+			Nama      string
+			NomorUrut int
+			PartaiID  string
+		}
+
+		var calegList []Caleg
+		for calegRows.Next() {
+			var cal Caleg
+			if err := calegRows.Scan(&cal.ID, &cal.Nama, &cal.NomorUrut, &cal.PartaiID); err != nil {
+				continue
+			}
+			calegList = append(calegList, cal)
+		}
+		calegRows.Close()
+
+		// Build headers
+		headers := []string{
+			"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+			"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		}
+
+		// Add caleg columns
+		for _, caleg := range calegList {
+			headers = append(headers, fmt.Sprintf("%d. %s", caleg.NomorUrut, caleg.Nama))
+		}
+		headers = append(headers, "TOTAL")
+
+		// Write headers
+		for i, header := range headers {
+			cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+			f.SetCellValue(sheetName, cell, header)
+		}
+
+		// Style headers
+		headerStyle, _ := f.NewStyle(&excelize.Style{
+			Font:      &excelize.Font{Bold: true, Size: 11},
+			Fill:      excelize.Fill{Type: "pattern", Color: []string{"#4472C4"}, Pattern: 1},
+			Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		lastCol, _ := excelize.ColumnNumberToName(len(headers))
+		f.SetCellStyle(sheetName, "A1", lastCol+"1", headerStyle)
+
+		// Set column widths
+		f.SetColWidth(sheetName, "A", "A", 5)
+		f.SetColWidth(sheetName, "B", "D", 20)
+		f.SetColWidth(sheetName, "E", "I", 15)
+
+		// Write data rows
+		rowNum := 2
+		for idx, kec := range kecList {
+			colNum := 1
+
+			// NO
+			cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, idx+1)
+			colNum++
+
+			// PROVINSI
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, proNama)
+			colNum++
+
+			// KODE PROV
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, proKode)
+			colNum++
+
+			// DAPIL
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, dapil.DapilNama)
+			colNum++
+
+			// KODE DAPIL
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, dapil.DapilKode)
+			colNum++
+
+			// KAB/KOTA
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kec.KabNama)
+			colNum++
+
+			// KODE KAB
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kec.KabKode)
+			colNum++
+
+			// KECAMATAN
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kec.KecNama)
+			colNum++
+
+			// KODE KEC
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kec.KecKode)
+			colNum++
+
+			// Get vote data from hr_dprd_kab_kec.tbl JSON field
+			var tblJSON string
+			err := h.db.QueryRow(`
+				SELECT tbl
+				FROM hr_dprd_kab_kec
+				WHERE dapil_kode = ? AND kec_kode = ?
+				LIMIT 1
+			`, dapil.DapilKode, kec.KecKode).Scan(&tblJSON)
+
+			// Parse tbl JSON to get caleg votes
+			calegVotes := make(map[string]int)
+			if err == nil && tblJSON != "" {
+				var tblData map[string]map[string]interface{}
+				if err := json.Unmarshal([]byte(tblJSON), &tblData); err == nil {
+					// tblData contains kode_desa as keys, then caleg_id as nested keys
+					for _, desaData := range tblData {
+						for calegID, suaraVal := range desaData {
+							if calegID != "null" {
+								if suara, ok := suaraVal.(float64); ok {
+									calegVotes[calegID] += int(suara)
+								}
+							}
+						}
+					}
+				}
+			}
+
+			// Write caleg vote data
+			totalSuara := 0
+			for _, caleg := range calegList {
+				cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+				suara := calegVotes[caleg.ID]
+				f.SetCellValue(sheetName, cell, suara)
+				totalSuara += suara
+				colNum++
+			}
+
+			// TOTAL
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, totalSuara)
+
+			rowNum++
+		}
+	}
+
+	// Set first sheet as active
+	if len(dapilList) > 0 {
+		f.SetActiveSheet(0)
+	}
+
+	// Set filename
+	filename := fmt.Sprintf("DPRD_Kabupaten_Caleg_%s_%s.xlsx", proKode, proNama)
+	filename = strings.ReplaceAll(filename, " ", "_")
+	filename = strings.ReplaceAll(filename, "/", "_")
+
+	// Set response headers
+	c.Response().Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	// Write to response
+	return f.Write(c.Response().Writer)
+}
+
+// sanitizeSheetName cleans sheet name to be Excel-compatible
+func sanitizeSheetName(name string) string {
+	// Remove invalid characters
+	name = strings.ReplaceAll(name, ":", "-")
+	name = strings.ReplaceAll(name, "/", "-")
+	name = strings.ReplaceAll(name, "\\", "-")
+	name = strings.ReplaceAll(name, "?", "")
+	name = strings.ReplaceAll(name, "*", "")
+	name = strings.ReplaceAll(name, "[", "")
+	name = strings.ReplaceAll(name, "]", "")
+
+	// Truncate to 31 characters (Excel limit)
+	if len(name) > 31 {
+		name = name[:31]
+	}
+
+	return name
+}
+
 // DownloadDPRRIPartai handles Excel download for DPR RI party data by dapil
 func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 	code := c.Param("id")
 
-	// Check if code is a kab_kode first (prioritize kabupaten)
+	// Check if code is a dapil_kode first (prioritize dapil since URL is /download/dapil/...)
 	var kabKode, kabNama, dapilID, dapilName, proCode, proName string
 
-	err := h.db.QueryRow("SELECT kab_kode, kab_nama, pro_kode FROM pdpr_wil_kab WHERE kab_kode = ?", code).Scan(&kabKode, &kabNama, &proCode)
+	// Try as dapil code first (kab_kode = '0' means it's the dapil master record)
+	err := h.db.QueryRow("SELECT dapil_id, dapil_nama, pro_kode FROM pdpr_wil_dapil WHERE dapil_kode = ? AND kab_kode = '0'", code).Scan(&dapilID, &dapilName, &proCode)
 	if err == nil {
-		// It's a kabupaten code
-
-		// Get dapil info from kelurahan (take first dapil in this kabupaten)
-		err = h.db.QueryRow("SELECT DISTINCT dapil_id, dapil_nama FROM pdpr_wil_kel WHERE kab_kode = ? LIMIT 1", kabKode).Scan(&dapilID, &dapilName)
-		if err != nil {
-			return c.String(http.StatusNotFound, "Dapil untuk kabupaten tidak ditemukan")
-		}
-	} else {
-		// Try as dapil code
-		err = h.db.QueryRow("SELECT dapil_id, dapil_nama, pro_kode FROM pdpr_wil_dapil WHERE dapil_kode = ?", code).Scan(&dapilID, &dapilName, &proCode)
-		if err != nil {
-			return c.String(http.StatusNotFound, "Dapil/Kabupaten tidak ditemukan")
-		}
+		// It's a dapil code
 
 		// Get first kabupaten in this dapil
 		err = h.db.QueryRow("SELECT DISTINCT kab_kode, kab_nama FROM pdpr_wil_kel WHERE dapil_id = ? ORDER BY kab_kode LIMIT 1", dapilID).Scan(&kabKode, &kabNama)
 		if err != nil {
 			return c.String(http.StatusNotFound, "Kabupaten dalam dapil tidak ditemukan")
+		}
+	} else {
+		// Try as kabupaten code
+		err = h.db.QueryRow("SELECT kab_kode, kab_nama, pro_kode FROM pdpr_wil_kab WHERE kab_kode = ?", code).Scan(&kabKode, &kabNama, &proCode)
+		if err != nil {
+			return c.String(http.StatusNotFound, "Dapil/Kabupaten tidak ditemukan")
+		}
+
+		// Get dapil info from kelurahan (take first dapil in this kabupaten)
+		err = h.db.QueryRow("SELECT DISTINCT dapil_id, dapil_nama FROM pdpr_wil_kel WHERE kab_kode = ? LIMIT 1", kabKode).Scan(&dapilID, &dapilName)
+		if err != nil {
+			return c.String(http.StatusNotFound, "Dapil untuk kabupaten tidak ditemukan")
 		}
 	}
 
@@ -56,7 +350,7 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 		proName = "Unknown"
 	}
 
-	// Get all kelurahan in this kabupaten only (not the entire dapil)
+	// Get all kelurahan in this dapil (all kabupaten in the dapil)
 	kelurahanQuery := `
 		SELECT DISTINCT
 			k.pro_id, k.dapil_id, k.kab_id, k.kec_id, k.kel_id,
@@ -65,11 +359,11 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 		FROM pdpr_wil_kel k
 		JOIN pdpr_wil_kec kec ON k.kec_kode = kec.kec_kode
 		JOIN pdpr_wil_kab kab ON kec.kab_kode = kab.kab_kode
-		WHERE k.kab_kode = ?
-		ORDER BY kec.kec_nama, k.kel_nama
+		WHERE k.dapil_id = ?
+		ORDER BY kab.kab_nama, kec.kec_nama, k.kel_nama
 	`
 
-	kelRows, err := h.db.Query(kelurahanQuery, kabKode)
+	kelRows, err := h.db.Query(kelurahanQuery, dapilID)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error querying kelurahan data")
 	}
@@ -655,36 +949,19 @@ func (h *DPRDownloadHandler) DownloadDPRRICaleg(c echo.Context) error {
 		}
 	}
 
-	// Get all candidates for this dapil (or all dapils covering the kabupaten)
+	// Get all candidates for this dapil (or primary dapil for the kabupaten)
 	var candidateQuery string
 	var candRows *sql.Rows
 
-	if isKabKode && len(dapilIDs) > 1 {
-		// Build IN clause for multiple dapils
-		placeholders := make([]string, len(dapilIDs))
-		args := make([]interface{}, len(dapilIDs))
-		for i, did := range dapilIDs {
-			placeholders[i] = "?"
-			args[i] = did
-		}
-		candidateQuery = fmt.Sprintf(`
-			SELECT c.id, c.nama, p.nama as nama_partai, p.partai_singkat, c.nomor_urut, c.partai_id
-			FROM dpr_ri_caleg c
-			LEFT JOIN partai p ON c.partai_id = p.id
-			WHERE c.dapil_id IN (%s)
-			ORDER BY p.nomor_urut, c.nomor_urut
-		`, strings.Join(placeholders, ","))
-		candRows, err = h.db.Query(candidateQuery, args...)
-	} else {
-		candidateQuery = `
-			SELECT c.id, c.nama, p.nama as nama_partai, p.partai_singkat, c.nomor_urut, c.partai_id
-			FROM dpr_ri_caleg c
-			LEFT JOIN partai p ON c.partai_id = p.id
-			WHERE c.dapil_id = ?
-			ORDER BY p.nomor_urut, c.nomor_urut
-		`
-		candRows, err = h.db.Query(candidateQuery, dapilID)
-	}
+	// Always use only the primary dapil (dapilID already set to first/primary dapil)
+	candidateQuery = `
+		SELECT c.id, c.nama, p.nama as nama_partai, p.partai_singkat, c.nomor_urut, c.partai_id
+		FROM dpr_ri_caleg c
+		LEFT JOIN partai p ON c.partai_id = p.id
+		WHERE c.dapil_id = ?
+		ORDER BY p.nomor_urut, c.nomor_urut
+	`
+	candRows, err = h.db.Query(candidateQuery, dapilID)
 
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error querying candidate data")
@@ -715,32 +992,15 @@ func (h *DPRDownloadHandler) DownloadDPRRICaleg(c echo.Context) error {
 	var partaiQuery string
 	var partaiRows *sql.Rows
 
-	if isKabKode && len(dapilIDs) > 1 {
-		// Build IN clause for multiple dapils
-		placeholders := make([]string, len(dapilIDs))
-		args := make([]interface{}, len(dapilIDs))
-		for i, did := range dapilIDs {
-			placeholders[i] = "?"
-			args[i] = did
-		}
-		partaiQuery = fmt.Sprintf(`
-			SELECT DISTINCT p.id, p.nama, p.partai_singkat, p.nomor_urut
-			FROM partai p
-			INNER JOIN dpr_ri_caleg c ON p.id = c.partai_id
-			WHERE c.dapil_id IN (%s)
-			ORDER BY p.nomor_urut
-		`, strings.Join(placeholders, ","))
-		partaiRows, err = h.db.Query(partaiQuery, args...)
-	} else {
-		partaiQuery = `
-			SELECT DISTINCT p.id, p.nama, p.partai_singkat, p.nomor_urut
-			FROM partai p
-			INNER JOIN dpr_ri_caleg c ON p.id = c.partai_id
-			WHERE c.dapil_id = ?
-			ORDER BY p.nomor_urut
-		`
-		partaiRows, err = h.db.Query(partaiQuery, dapilID)
-	}
+	// Always use only the primary dapil
+	partaiQuery = `
+		SELECT DISTINCT p.id, p.nama, p.partai_singkat, p.nomor_urut
+		FROM partai p
+		INNER JOIN dpr_ri_caleg c ON p.id = c.partai_id
+		WHERE c.dapil_id = ?
+		ORDER BY p.nomor_urut
+	`
+	partaiRows, err = h.db.Query(partaiQuery, dapilID)
 
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error querying party data")
@@ -4480,73 +4740,147 @@ func (h *DPRDownloadHandler) DownloadDapilDPRRIPartaiTPS(c echo.Context) error {
 		return c.String(http.StatusNotFound, "Tidak ada data TPS untuk dapil ini")
 	}
 
-	// Get party list from dpr_ri_partai
-	partaiRows, err := h.db.Query(`SELECT nomor_urut, nama FROM dpr_ri_partai ORDER BY nomor_urut`)
+	// Get party list from dapil's candidates
+	partaiQuery := `
+		SELECT DISTINCT p.id, p.nama, p.partai_singkat, p.nomor_urut
+		FROM partai p
+		INNER JOIN dpr_ri_caleg c ON p.id = c.partai_id
+		WHERE c.dapil_id = ?
+		ORDER BY p.nomor_urut
+	`
+	partaiRows, err := h.db.Query(partaiQuery, dapilID)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error querying party data")
+		return c.String(http.StatusInternalServerError, "Error querying party data: "+err.Error())
 	}
 	defer partaiRows.Close()
 
 	type PartaiInfo struct {
-		NomorUrut int
-		Nama      string
+		ID            int
+		Nama          string
+		PartaiSingkat string
+		NomorUrut     int
 	}
 
 	var partaiList []PartaiInfo
 	for partaiRows.Next() {
 		var p PartaiInfo
-		if err := partaiRows.Scan(&p.NomorUrut, &p.Nama); err != nil {
+		if err := partaiRows.Scan(&p.ID, &p.Nama, &p.PartaiSingkat, &p.NomorUrut); err != nil {
 			continue
 		}
 		partaiList = append(partaiList, p)
 	}
 
-	// Get vote data from hs_dpr_ri_tps
-	voteDataQuery := `SELECT tps_kode, chart FROM hs_dpr_ri_tps WHERE dapil_kode = ?`
-	voteRows, err := h.db.Query(voteDataQuery, dapilCode)
+	// Get vote data from hr_dpr_ri_kel for this dapil
+	voteDataQuery := `SELECT kel_kode, tbl FROM hr_dpr_ri_kel WHERE dapil_id = ?`
+	voteRows, err := h.db.Query(voteDataQuery, dapilID)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error querying vote data")
+		return c.String(http.StatusInternalServerError, "Error querying vote data: "+err.Error())
 	}
 	defer voteRows.Close()
 
-	partaiData := make(map[string]map[int]int)
+	// Parse TPS-level data from tbl field
+	// tbl contains: {"tps_kode": {"caleg_id": votes, ...}, ...}
+	tpsVoteData := make(map[string]map[string]int) // tps_kode -> caleg_id -> votes
+
 	for voteRows.Next() {
-		var tpsKode, chartJSON string
-		if err := voteRows.Scan(&tpsKode, &chartJSON); err != nil {
+		var kelKode, tblJSON string
+		if err := voteRows.Scan(&kelKode, &tblJSON); err != nil {
 			continue
 		}
 
-		var chartData map[string]interface{}
-		if err := json.Unmarshal([]byte(chartJSON), &chartData); err != nil {
+		// Parse TPS data: {"tps_kode": {"caleg_id": votes, ...}, ...}
+		var tpsDataMap map[string]map[string]interface{}
+		if err := json.Unmarshal([]byte(tblJSON), &tpsDataMap); err != nil {
 			continue
 		}
 
-		partaiData[tpsKode] = make(map[int]int)
-		if partai, ok := chartData["partai"].([]interface{}); ok {
-			for _, p := range partai {
-				if pData, ok := p.(map[string]interface{}); ok {
-					nomor := int(pData["nomor_urut"].(float64))
-					suara := int(pData["jumlah_suara_total"].(float64))
-					partaiData[tpsKode][nomor] = suara
+		for tpsKode, calegVotes := range tpsDataMap {
+			if _, exists := tpsVoteData[tpsKode]; !exists {
+				tpsVoteData[tpsKode] = make(map[string]int)
+			}
+
+			for calegID, voteVal := range calegVotes {
+				if calegID == "null" {
+					continue
 				}
+				votes := 0
+				switch v := voteVal.(type) {
+				case float64:
+					votes = int(v)
+				case int:
+					votes = v
+				case string:
+					votes, _ = strconv.Atoi(v)
+				}
+				tpsVoteData[tpsKode][calegID] = votes
 			}
 		}
 	}
 
+	// Get caleg ID to party mapping
+	calegPartyQuery := `
+		SELECT c.id, c.partai_id
+		FROM dpr_ri_caleg c
+		WHERE c.dapil_id = ?
+	`
+	calegRows, err := h.db.Query(calegPartyQuery, dapilID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error querying caleg data: "+err.Error())
+	}
+	defer calegRows.Close()
+
+	calegPartyMap := make(map[string]int) // caleg_id -> party_id
+	for calegRows.Next() {
+		var calegID string
+		var partaiID int
+		if err := calegRows.Scan(&calegID, &partaiID); err != nil {
+			continue
+		}
+		calegPartyMap[calegID] = partaiID
+	}
+
+	// Aggregate votes by TPS and party
+	tpsPartaiVotes := make(map[string]map[int]int) // tps_kode -> partai_id -> total_votes
+	for tpsKode, calegVotes := range tpsVoteData {
+		if _, exists := tpsPartaiVotes[tpsKode]; !exists {
+			tpsPartaiVotes[tpsKode] = make(map[int]int)
+		}
+
+		for calegID, votes := range calegVotes {
+			if partaiID, ok := calegPartyMap[calegID]; ok {
+				tpsPartaiVotes[tpsKode][partaiID] += votes
+			}
+		}
+	}
+
+	// Get province name
+	var proName string
+	err = h.db.QueryRow("SELECT pro_nama FROM pdpr_wil_pro WHERE pro_kode = ?", proCode).Scan(&proName)
+	if err != nil {
+		proName = ""
+	}
+
 	// Create Excel file
 	f := excelize.NewFile()
-	sheetName := "DPR RI PARTAI TPS"
-	f.SetSheetName("Sheet1", sheetName)
+	sheetName := "Data Suara Partai Per TPS"
+	index, err := f.NewSheet(sheetName)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error creating Excel sheet")
+	}
+	f.SetActiveSheet(index)
+	f.DeleteSheet("Sheet1")
 
-	// Headers
+	// Set headers
 	headers := []string{
-		"NO", "KODE PROV", "KODE DAPIL", "KODE KAB", "KODE KEC", "KODE DESA", "KODE TPS",
-		"DAPIL", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN/DESA", "TPS", "JML DPT",
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
 	}
 
 	for _, p := range partaiList {
-		headers = append(headers, p.Nama)
+		headers = append(headers, p.PartaiSingkat)
 	}
+	headers = append(headers, "TOTAL")
 
 	// Write headers
 	headerStyle, _ := f.NewStyle(&excelize.Style{
@@ -4567,50 +4901,124 @@ func (h *DPRDownloadHandler) DownloadDapilDPRRIPartaiTPS(c echo.Context) error {
 		f.SetCellStyle(sheetName, cell, cell, headerStyle)
 	}
 
-	// Set column widths
-	f.SetColWidth(sheetName, "A", "A", 5)
-	f.SetColWidth(sheetName, "B", "G", 12)
-	f.SetColWidth(sheetName, "H", "L", 25)
-	f.SetColWidth(sheetName, "M", "M", 10)
-	for i := 0; i < len(partaiList); i++ {
-		colName, _ := excelize.ColumnNumberToName(14 + i)
-		f.SetColWidth(sheetName, colName, colName, 12)
-	}
+	// Style headers
+	lastCol, _ := excelize.ColumnNumberToName(len(headers))
+	f.SetCellStyle(sheetName, "A1", lastCol+"1", headerStyle)
 
-	// Write data
+	// Write data rows
 	rowNum := 2
 	for idx, tps := range tpsList {
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), idx+1)
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), tps.ProKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), tps.DapilKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), tps.KabKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), tps.KecKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), tps.KelKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), tps.TPSKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), dapilName)
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), tps.KabNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), tps.KecNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), tps.KelNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), tps.TPSNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), tps.TotalDPT)
+		colNum := 1
 
-		// Write party votes
-		for i, partai := range partaiList {
-			col := 14 + i
-			cell, _ := excelize.CoordinatesToCellName(col, rowNum)
-			if votes, ok := partaiData[tps.TPSKode]; ok {
-				if suara, exists := votes[partai.NomorUrut]; exists {
-					f.SetCellValue(sheetName, cell, suara)
-				} else {
-					f.SetCellValue(sheetName, cell, 0)
-				}
+		// NO
+		cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, idx+1)
+		colNum++
+
+		// PROVINSI
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proName)
+		colNum++
+
+		// KODE PROV
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.ProKode)
+		colNum++
+
+		// DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilName)
+		colNum++
+
+		// KODE DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.DapilKode)
+		colNum++
+
+		// KAB/KOTA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KabNama)
+		colNum++
+
+		// KODE KAB
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KabKode)
+		colNum++
+
+		// KECAMATAN
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KecNama)
+		colNum++
+
+		// KODE KEC
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KecKode)
+		colNum++
+
+		// KELURAHAN/DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KelNama)
+		colNum++
+
+		// KODE DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KelKode)
+		colNum++
+
+		// TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.TPSNama)
+		colNum++
+
+		// KODE TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.TPSKode)
+		colNum++
+
+		// DPT
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.TotalDPT)
+		colNum++
+
+		// Party votes
+		totalSuara := 0
+		tpsVotes := tpsPartaiVotes[tps.TPSKode]
+		for _, partai := range partaiList {
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			votes := tpsVotes[partai.ID]
+			if votes > 0 || len(tpsVotes) > 0 {
+				f.SetCellValue(sheetName, cell, votes)
+				totalSuara += votes
 			} else {
-				f.SetCellValue(sheetName, cell, 0)
+				f.SetCellValue(sheetName, cell, "-")
 			}
+			colNum++
+		}
+
+		// TOTAL column
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		if len(tpsVotes) > 0 {
+			f.SetCellValue(sheetName, cell, totalSuara)
+		} else {
+			f.SetCellValue(sheetName, cell, "-")
 		}
 
 		rowNum++
 	}
+
+	// Apply borders to all cells
+	dataStyle, _ := f.NewStyle(&excelize.Style{
+		Border: []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+		},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+	})
+	lastRow := rowNum - 1
+	lastColName, _ := excelize.ColumnNumberToName(len(headers))
+	f.SetCellStyle(sheetName, "A2", lastColName+fmt.Sprintf("%d", lastRow), dataStyle)
 
 	filename := fmt.Sprintf("DPR_RI_Partai_Per_TPS_Dapil_%s.xlsx", dapilName)
 	c.Response().Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
@@ -4681,93 +5089,136 @@ func (h *DPRDownloadHandler) DownloadDapilDPRRICalegTPS(c echo.Context) error {
 		return c.String(http.StatusNotFound, "Tidak ada data TPS untuk dapil ini")
 	}
 
-	// Get caleg list for this dapil
-	calegRows, err := h.db.Query(`
-		SELECT id, nomor_urut, nama, partai_id, partai_nama, dapil_kode
-		FROM dpr_ri_caleg
-		WHERE dapil_kode = ?
-		ORDER BY partai_id, nomor_urut
-	`, dapilCode)
+	// Get vote data from hr_dpr_ri_kel for this dapil
+	voteDataQuery := `SELECT kel_kode, tbl FROM hr_dpr_ri_kel WHERE dapil_id = ?`
+	voteRows, err := h.db.Query(voteDataQuery, dapilID)
 	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error querying caleg data")
-	}
-	defer calegRows.Close()
-
-	type CalegInfo struct {
-		ID         int
-		NomorUrut  int
-		Nama       string
-		PartaiID   int
-		PartaiNama string
-		DapilKode  string
-	}
-
-	var calegList []CalegInfo
-	for calegRows.Next() {
-		var c CalegInfo
-		if err := calegRows.Scan(&c.ID, &c.NomorUrut, &c.Nama, &c.PartaiID, &c.PartaiNama, &c.DapilKode); err != nil {
-			continue
-		}
-		calegList = append(calegList, c)
-	}
-
-	// Get vote data from hs_dpr_ri_tps
-	voteDataQuery := `SELECT tps_kode, chart FROM hs_dpr_ri_tps WHERE dapil_kode = ?`
-	voteRows, err := h.db.Query(voteDataQuery, dapilCode)
-	if err != nil {
-		return c.String(http.StatusInternalServerError, "Error querying vote data")
+		return c.String(http.StatusInternalServerError, "Error querying vote data: "+err.Error())
 	}
 	defer voteRows.Close()
 
-	calegData := make(map[string]map[int]int)
+	// Parse TPS-level data from tbl field
+	// tbl contains: {"tps_kode": {"caleg_id": votes, ...}, ...}
+	tpsVoteData := make(map[string]map[string]int) // tps_kode -> caleg_id -> votes
+
 	for voteRows.Next() {
-		var tpsKode, chartJSON string
-		if err := voteRows.Scan(&tpsKode, &chartJSON); err != nil {
+		var kelKode, tblJSON string
+		if err := voteRows.Scan(&kelKode, &tblJSON); err != nil {
 			continue
 		}
 
-		var chartData map[string]interface{}
-		if err := json.Unmarshal([]byte(chartJSON), &chartData); err != nil {
+		// Parse TPS data: {"tps_kode": {"caleg_id": votes, ...}, ...}
+		var tpsDataMap map[string]map[string]interface{}
+		if err := json.Unmarshal([]byte(tblJSON), &tpsDataMap); err != nil {
 			continue
 		}
 
-		calegData[tpsKode] = make(map[int]int)
-		if partai, ok := chartData["partai"].([]interface{}); ok {
-			for _, p := range partai {
-				if pData, ok := p.(map[string]interface{}); ok {
-					if caleg, ok := pData["calon"].([]interface{}); ok {
-						for _, cl := range caleg {
-							if clData, ok := cl.(map[string]interface{}); ok {
-								calegID := int(clData["caleg_id"].(float64))
-								suara := int(clData["jumlah_suara"].(float64))
-								calegData[tpsKode][calegID] = suara
-							}
-						}
-					}
+		for tpsKode, calegVotes := range tpsDataMap {
+			if _, exists := tpsVoteData[tpsKode]; !exists {
+				tpsVoteData[tpsKode] = make(map[string]int)
+			}
+
+			for calegID, voteVal := range calegVotes {
+				if calegID == "null" {
+					continue
 				}
+				votes := 0
+				switch v := voteVal.(type) {
+				case float64:
+					votes = int(v)
+				case int:
+					votes = v
+				case string:
+					votes, _ = strconv.Atoi(v)
+				}
+				tpsVoteData[tpsKode][calegID] = votes
 			}
 		}
 	}
 
+	// Get all candidates for this dapil
+	candidateQuery := `
+		SELECT c.id, c.nama, p.nama as nama_partai, p.partai_singkat, c.nomor_urut, c.partai_id
+		FROM dpr_ri_caleg c
+		LEFT JOIN partai p ON c.partai_id = p.id
+		WHERE c.dapil_id = ?
+		ORDER BY p.nomor_urut, c.nomor_urut
+	`
+	calegRows, err := h.db.Query(candidateQuery, dapilID)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error querying candidate data: "+err.Error())
+	}
+	defer calegRows.Close()
+
+	type Candidate struct {
+		ID            string
+		Nama          string
+		Partai        string
+		PartaiSingkat string
+		NomorUrut     int
+		PartaiID      int
+	}
+
+	var candidatesList []Candidate
+	for calegRows.Next() {
+		var c Candidate
+		if err := calegRows.Scan(&c.ID, &c.Nama, &c.Partai, &c.PartaiSingkat, &c.NomorUrut, &c.PartaiID); err != nil {
+			continue
+		}
+		candidatesList = append(candidatesList, c)
+	}
+
+	// Get province name
+	var proName string
+	err = h.db.QueryRow("SELECT pro_nama FROM pdpr_wil_pro WHERE pro_kode = ?", proCode).Scan(&proName)
+	if err != nil {
+		proName = ""
+	}
+
 	// Create Excel file
 	f := excelize.NewFile()
-	sheetName := "DPR RI CALEG TPS"
-	f.SetSheetName("Sheet1", sheetName)
+	sheetName := "Data Suara Caleg Per TPS"
+	index, err := f.NewSheet(sheetName)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error creating Excel sheet")
+	}
+	f.SetActiveSheet(index)
+	f.DeleteSheet("Sheet1")
 
-	// Headers
-	headers := []string{
-		"NO", "KODE PROV", "KODE DAPIL", "KODE KAB", "KODE KEC", "KODE DESA", "KODE TPS",
-		"DAPIL", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN/DESA", "TPS", "JML DPT",
+	// Fixed columns
+	fixedCols := []string{
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
 	}
 
-	for _, caleg := range calegList {
-		headers = append(headers, fmt.Sprintf("%s (%s - %d)", caleg.Nama, caleg.PartaiNama, caleg.NomorUrut))
-	}
+	// Calculate total columns: fixed + candidates + total
+	totalCols := len(fixedCols) + len(candidatesList) + 1
 
 	// Write headers
+	colNum := 1
+	for _, col := range fixedCols {
+		cell, _ := excelize.CoordinatesToCellName(colNum, 1)
+		f.SetCellValue(sheetName, cell, col)
+		colNum++
+	}
+
+	// Add candidate columns
+	for _, cand := range candidatesList {
+		cell, _ := excelize.CoordinatesToCellName(colNum, 1)
+		headerText := fmt.Sprintf("%s\n%d\n%s", cand.PartaiSingkat, cand.NomorUrut, cand.Nama)
+		f.SetCellValue(sheetName, cell, headerText)
+		colNum++
+	}
+
+	// TOTAL column
+	cell, _ := excelize.CoordinatesToCellName(colNum, 1)
+	f.SetCellValue(sheetName, cell, "TOTAL")
+
+	// Style headers
 	headerStyle, _ := f.NewStyle(&excelize.Style{
-		Font:      &excelize.Font{Bold: true, Color: "FFFFFF"},
-		Fill:      excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
+		Font: &excelize.Font{Bold: true, Size: 11, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
 		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
 		Border: []excelize.Border{
 			{Type: "left", Color: "000000", Style: 1},
@@ -4776,56 +5227,135 @@ func (h *DPRDownloadHandler) DownloadDapilDPRRICalegTPS(c echo.Context) error {
 			{Type: "right", Color: "000000", Style: 1},
 		},
 	})
-
-	for i, header := range headers {
-		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
-		f.SetCellValue(sheetName, cell, header)
-		f.SetCellStyle(sheetName, cell, cell, headerStyle)
-	}
+	lastCol, _ := excelize.ColumnNumberToName(totalCols)
+	f.SetCellStyle(sheetName, "A1", lastCol+"1", headerStyle)
 
 	// Set column widths
 	f.SetColWidth(sheetName, "A", "A", 5)
-	f.SetColWidth(sheetName, "B", "G", 12)
-	f.SetColWidth(sheetName, "H", "L", 25)
-	f.SetColWidth(sheetName, "M", "M", 10)
-	for i := 0; i < len(calegList); i++ {
-		colName, _ := excelize.ColumnNumberToName(14 + i)
-		f.SetColWidth(sheetName, colName, colName, 20)
-	}
+	f.SetColWidth(sheetName, "B", "B", 20)
+	f.SetColWidth(sheetName, "C", "C", 12)
+	f.SetColWidth(sheetName, "D", "D", 25)
+	f.SetRowHeight(sheetName, 1, 40)
 
-	// Write data
+	// Write data rows
 	rowNum := 2
 	for idx, tps := range tpsList {
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), idx+1)
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), tps.ProKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), tps.DapilKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), tps.KabKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), tps.KecKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), tps.KelKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), tps.TPSKode)
-		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), dapilName)
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), tps.KabNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), tps.KecNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), tps.KelNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), tps.TPSNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), tps.TotalDPT)
+		colNum := 1
 
-		// Write caleg votes
-		for i, caleg := range calegList {
-			col := 14 + i
-			cell, _ := excelize.CoordinatesToCellName(col, rowNum)
-			if votes, ok := calegData[tps.TPSKode]; ok {
-				if suara, exists := votes[caleg.ID]; exists {
-					f.SetCellValue(sheetName, cell, suara)
-				} else {
-					f.SetCellValue(sheetName, cell, 0)
+		// NO
+		cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, idx+1)
+		colNum++
+
+		// PROVINSI
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proName)
+		colNum++
+
+		// KODE PROV
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.ProKode)
+		colNum++
+
+		// DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilName)
+		colNum++
+
+		// KODE DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.DapilKode)
+		colNum++
+
+		// KAB/KOTA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KabNama)
+		colNum++
+
+		// KODE KAB
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KabKode)
+		colNum++
+
+		// KECAMATAN
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KecNama)
+		colNum++
+
+		// KODE KEC
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KecKode)
+		colNum++
+
+		// KELURAHAN/DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KelNama)
+		colNum++
+
+		// KODE DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.KelKode)
+		colNum++
+
+		// TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.TPSNama)
+		colNum++
+
+		// KODE TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.TPSKode)
+		colNum++
+
+		// DPT
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tps.TotalDPT)
+		colNum++
+
+		// Candidate votes
+		totalSuara := 0
+		tpsVotes := tpsVoteData[tps.TPSKode]
+		for _, cand := range candidatesList {
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			votes := 0
+			if tpsVotes != nil {
+				if v, ok := tpsVotes[cand.ID]; ok {
+					votes = v
 				}
-			} else {
-				f.SetCellValue(sheetName, cell, 0)
 			}
+			if len(tpsVotes) > 0 {
+				f.SetCellValue(sheetName, cell, votes)
+				totalSuara += votes
+			} else {
+				f.SetCellValue(sheetName, cell, "-")
+			}
+			colNum++
+		}
+
+		// TOTAL column
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		if len(tpsVotes) > 0 {
+			f.SetCellValue(sheetName, cell, totalSuara)
+		} else {
+			f.SetCellValue(sheetName, cell, "-")
 		}
 
 		rowNum++
+	}
+
+	// Apply borders to all cells
+	dataStyle, _ := f.NewStyle(&excelize.Style{
+		Border: []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+		},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+	})
+	lastRow := rowNum - 1
+	if lastRow >= 2 {
+		f.SetCellStyle(sheetName, "A2", lastCol+fmt.Sprintf("%d", lastRow), dataStyle)
 	}
 
 	filename := fmt.Sprintf("DPR_RI_Caleg_Per_TPS_Dapil_%s.xlsx", dapilName)
@@ -4970,10 +5500,11 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRDProvCaleg(c echo.Context) error
 
 	// Get caleg list for this province sorted by dapil and nomor urut
 	calegRows, err := h.db.Query(`
-		SELECT id, nama, nomor_urut, partai_id, dapil_id, dapil_nama
-		FROM dprd_pro_caleg
-		WHERE pro_kode = ?
-		ORDER BY dapil_id, partai_id, nomor_urut
+		SELECT c.id, c.nama, c.nomor_urut, c.partai_id, c.dapil_id, c.dapil_nama
+		FROM dprd_pro_caleg c
+		LEFT JOIN partai p ON c.partai_id = p.id
+		WHERE c.pro_kode = ?
+		ORDER BY c.dapil_id, p.nomor_urut, c.nomor_urut
 	`, proCode)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error querying caleg data")
@@ -5157,6 +5688,14 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRDProvCaleg(c echo.Context) error
 			f.SetCellStyle(sheetName, cell, cell, headerRow1Style)
 		}
 
+		// Add "JUMLAH SUARA" column header
+		totalCol := len(fixedHeaders) + len(calegList) + 1
+		totalCell, _ := excelize.CoordinatesToCellName(totalCol, 1)
+		f.SetCellValue(sheetName, totalCell, "JUMLAH SUARA")
+		f.SetCellStyle(sheetName, totalCell, totalCell, headerRow1Style)
+		totalEndCell, _ := excelize.CoordinatesToCellName(totalCol, 3)
+		f.MergeCell(sheetName, totalCell, totalEndCell)
+
 		// Row 2: NOMOR URUT CALEG
 		for i, caleg := range calegList {
 			col := len(fixedHeaders) + 1 + i
@@ -5182,6 +5721,9 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRDProvCaleg(c echo.Context) error
 			colName, _ := excelize.ColumnNumberToName(len(fixedHeaders) + 1 + i)
 			f.SetColWidth(sheetName, colName, colName, 20)
 		}
+		// Set width for JUMLAH SUARA column
+		totalColName, _ := excelize.ColumnNumberToName(totalCol)
+		f.SetColWidth(sheetName, totalColName, totalColName, 15)
 
 		// Set row height for header rows
 		f.SetRowHeight(sheetName, 1, 30)
@@ -5210,13 +5752,15 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRDProvCaleg(c echo.Context) error
 				f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), "-")
 			}
 
-			// Write caleg votes
+			// Write caleg votes and calculate total
+			totalVotes := 0
 			for i, caleg := range calegList {
 				col := len(fixedHeaders) + 1 + i
 				cell, _ := excelize.CoordinatesToCellName(col, rowNum)
 				if votes, ok := calegVoteData[kel.KelKode]; ok {
 					if suara, exists := votes[caleg.ID]; exists {
 						f.SetCellValue(sheetName, cell, suara)
+						totalVotes += suara
 					} else {
 						f.SetCellValue(sheetName, cell, 0)
 					}
@@ -5225,13 +5769,17 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRDProvCaleg(c echo.Context) error
 				}
 			}
 
+			// Write total votes
+			totalVotesCell, _ := excelize.CoordinatesToCellName(totalCol, rowNum)
+			f.SetCellValue(sheetName, totalVotesCell, totalVotes)
+
 			rowNum++
 		}
 
 		// Apply borders to all data cells
 		if len(kelurahanList) > 0 {
 			lastRow := len(kelurahanList) + 3
-			lastCol, _ := excelize.ColumnNumberToName(len(fixedHeaders) + len(calegList))
+			lastCol, _ := excelize.ColumnNumberToName(len(fixedHeaders) + len(calegList) + 1)
 			f.SetCellStyle(sheetName, "A4", lastCol+strconv.Itoa(lastRow), dataStyle)
 		}
 	}
@@ -5581,4 +6129,407 @@ func (h *DPRDownloadHandler) DownloadDPRDKabPartai(c echo.Context) error {
 	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
 
 	return f.Write(c.Response().Writer)
+}
+
+// DownloadPilpresByProvince handles Excel download for Pilpres data per TPS by province
+func (h *DPRDownloadHandler) DownloadPilpresByProvince(c echo.Context) error {
+	proKode := c.Param("id")
+
+	// Get province name
+	var proNama string
+	err := h.db.QueryRow("SELECT pro_nama FROM pdpr_wil_pro WHERE pro_kode = ?", proKode).Scan(&proNama)
+	if err != nil {
+		return c.String(http.StatusNotFound, "Provinsi tidak ditemukan")
+	}
+
+	// Get all TPS data with vote counts from hs_pilpres_tps
+	tpsQuery := `
+		SELECT
+			tps_kode, tps_nama, kel_nama, kec_nama, kab_nama,
+			chart, administrasi
+		FROM hs_pilpres_tps
+		WHERE pro_kode = ?
+		ORDER BY kab_nama, kec_nama, kel_nama, tps_nama
+	`
+
+	tpsRows, err := h.db.Query(tpsQuery, proKode)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error querying TPS data")
+	}
+	defer tpsRows.Close()
+
+	// Create Excel file
+	f := excelize.NewFile()
+	sheetName := "Data Pilpres"
+	f.SetSheetName("Sheet1", sheetName)
+
+	// Set header style
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center"},
+		Border: []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+		},
+	})
+
+	// Set headers
+	headers := []string{
+		"NO", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN/DESA", "TPS",
+		"ANIES-MUHAIMIN", "PRABOWO-GIBRAN", "GANJAR-MAHFUD",
+		"DPT", "PENGGUNA HAK PILIH", "SUARA SAH", "SUARA TIDAK SAH", "TOTAL SUARA",
+	}
+
+	for i, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheetName, cell, header)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+
+	// Set column widths
+	f.SetColWidth(sheetName, "A", "A", 6)
+	f.SetColWidth(sheetName, "B", "B", 25)
+	f.SetColWidth(sheetName, "C", "C", 25)
+	f.SetColWidth(sheetName, "D", "D", 25)
+	f.SetColWidth(sheetName, "E", "E", 12)
+	f.SetColWidth(sheetName, "F", "H", 18)
+	f.SetColWidth(sheetName, "I", "M", 15)
+
+	rowNum := 2
+	for tpsRows.Next() {
+		var tpsKode, tpsNama, kelNama, kecNama, kabNama string
+		var chartJSON, administrasiJSON sql.NullString
+
+		if err := tpsRows.Scan(&tpsKode, &tpsNama, &kelNama, &kecNama, &kabNama, &chartJSON, &administrasiJSON); err != nil {
+			continue
+		}
+
+		// Parse chart data (vote counts) - use pointers to distinguish between "no data" and "0"
+		var chart map[string]interface{}
+		var paslon1, paslon2, paslon3 *int
+		if chartJSON.Valid && chartJSON.String != "" {
+			if err := json.Unmarshal([]byte(chartJSON.String), &chart); err == nil {
+				if val, ok := chart["100025"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						paslon1 = &temp
+					}
+				}
+				if val, ok := chart["100026"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						paslon2 = &temp
+					}
+				}
+				if val, ok := chart["100027"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						paslon3 = &temp
+					}
+				}
+			}
+		}
+
+		// Parse administrasi data - use pointers to distinguish between "no data" and "0"
+		var administrasi map[string]interface{}
+		var dpt, penggunaHakPilih, suaraSah, suaraTidakSah, totalSuara *int
+		if administrasiJSON.Valid && administrasiJSON.String != "" {
+			if err := json.Unmarshal([]byte(administrasiJSON.String), &administrasi); err == nil {
+				if val, ok := administrasi["pemilih_dpt_j"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						dpt = &temp
+					}
+				}
+				if val, ok := administrasi["pengguna_total_j"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						penggunaHakPilih = &temp
+					}
+				}
+				if val, ok := administrasi["suara_sah"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						suaraSah = &temp
+					}
+				}
+				if val, ok := administrasi["suara_tidak_sah"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						suaraTidakSah = &temp
+					}
+				}
+				if val, ok := administrasi["suara_total"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						totalSuara = &temp
+					}
+				}
+			}
+		}
+
+		// Write data row
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), rowNum-1)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), kabNama)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kecNama)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kelNama)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), tpsNama)
+
+		// Set vote counts - show "-" if no data, or the actual value (including 0)
+		if paslon1 != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), *paslon1)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("F%d", rowNum), "-")
+		}
+		if paslon2 != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), *paslon2)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("G%d", rowNum), "-")
+		}
+		if paslon3 != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), *paslon3)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("H%d", rowNum), "-")
+		}
+
+		// Set administrative data - show "-" if no data, or the actual value (including 0)
+		if dpt != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), *dpt)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("I%d", rowNum), "-")
+		}
+		if penggunaHakPilih != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), *penggunaHakPilih)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("J%d", rowNum), "-")
+		}
+		if suaraSah != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), *suaraSah)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("K%d", rowNum), "-")
+		}
+		if suaraTidakSah != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), *suaraTidakSah)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("L%d", rowNum), "-")
+		}
+		if totalSuara != nil {
+			f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), *totalSuara)
+		} else {
+			f.SetCellStr(sheetName, fmt.Sprintf("M%d", rowNum), "-")
+		}
+
+		rowNum++
+	}
+
+	// Apply borders to all data cells
+	if rowNum > 2 {
+		dataStyle, _ := f.NewStyle(&excelize.Style{
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		lastRow := rowNum - 1
+		f.SetCellStyle(sheetName, "A2", fmt.Sprintf("M%d", lastRow), dataStyle)
+	}
+
+	// Set response headers
+	cleanProNama := strings.ReplaceAll(proNama, "/", "-")
+	filename := fmt.Sprintf("Pilpres_TPS_%s.xlsx", cleanProNama)
+	c.Response().Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	return f.Write(c.Response().Writer)
+}
+
+// DownloadDPDByProvinceTPS handles Excel download for DPD data per TPS by province
+func (h *DPRDownloadHandler) DownloadDPDByProvinceTPS(c echo.Context) error {
+	proKode := c.Param("id")
+
+	// Get province name
+	var proNama string
+	err := h.db.QueryRow("SELECT pro_nama FROM pdpr_wil_pro WHERE pro_kode = ?", proKode).Scan(&proNama)
+	if err != nil {
+		return c.String(http.StatusNotFound, "Provinsi tidak ditemukan")
+	}
+
+	// Get all DPD candidates for this province
+	calegQuery := `
+		SELECT id, nama, nomor_urut
+		FROM dpd_caleg
+		WHERE pro_kode = ?
+		ORDER BY nomor_urut
+	`
+	calegRows, err := h.db.Query(calegQuery, proKode)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error querying DPD candidates")
+	}
+	defer calegRows.Close()
+
+	type Caleg struct {
+		ID         string
+		Nama       string
+		NomorUrut  int
+	}
+
+	var calegList []Caleg
+	calegMap := make(map[string]Caleg)
+	for calegRows.Next() {
+		var c Caleg
+		if err := calegRows.Scan(&c.ID, &c.Nama, &c.NomorUrut); err != nil {
+			continue
+		}
+		calegList = append(calegList, c)
+		calegMap[c.ID] = c
+	}
+
+	if len(calegList) == 0 {
+		return c.String(http.StatusNotFound, "Tidak ada caleg DPD untuk provinsi ini")
+	}
+
+	// Get all TPS data with vote counts from hs_dpd_tps
+	tpsQuery := `
+		SELECT
+			tps_kode, tps_nama, kel_nama, kec_nama, kab_nama, chart
+		FROM hs_dpd_tps
+		WHERE pro_kode = ?
+		ORDER BY kab_nama, kec_nama, kel_nama, tps_nama
+	`
+
+	tpsRows, err := h.db.Query(tpsQuery, proKode)
+	if err != nil {
+		return c.String(http.StatusInternalServerError, "Error querying TPS data")
+	}
+	defer tpsRows.Close()
+
+	// Create Excel file
+	f := excelize.NewFile()
+	sheetName := "Data DPD"
+	f.SetSheetName("Sheet1", sheetName)
+
+	// Set header style
+	headerStyle, _ := f.NewStyle(&excelize.Style{
+		Font: &excelize.Font{Bold: true, Color: "FFFFFF"},
+		Fill: excelize.Fill{Type: "pattern", Color: []string{"4472C4"}, Pattern: 1},
+		Alignment: &excelize.Alignment{Horizontal: "center", Vertical: "center", WrapText: true},
+		Border: []excelize.Border{
+			{Type: "left", Color: "000000", Style: 1},
+			{Type: "top", Color: "000000", Style: 1},
+			{Type: "bottom", Color: "000000", Style: 1},
+			{Type: "right", Color: "000000", Style: 1},
+		},
+	})
+
+	// Set headers - first row: NO, location columns, then candidate names
+	headers := []string{"NO", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN/DESA", "TPS"}
+
+	// Add candidate headers (Nomor Urut - Nama)
+	for _, caleg := range calegList {
+		headers = append(headers, fmt.Sprintf("%d - %s", caleg.NomorUrut, caleg.Nama))
+	}
+
+	for i, header := range headers {
+		cell, _ := excelize.CoordinatesToCellName(i+1, 1)
+		f.SetCellValue(sheetName, cell, header)
+		f.SetCellStyle(sheetName, cell, cell, headerStyle)
+	}
+
+	// Set column widths
+	f.SetColWidth(sheetName, "A", "A", 6)
+	f.SetColWidth(sheetName, "B", "B", 25)
+	f.SetColWidth(sheetName, "C", "C", 25)
+	f.SetColWidth(sheetName, "D", "D", 25)
+	f.SetColWidth(sheetName, "E", "E", 12)
+
+	// Set candidate column widths
+	startCol := 6
+	endCol := startCol + len(calegList) - 1
+	if endCol >= startCol {
+		startColName, _ := excelize.ColumnNumberToName(startCol)
+		endColName, _ := excelize.ColumnNumberToName(endCol)
+		f.SetColWidth(sheetName, startColName, endColName, 20)
+	}
+
+	rowNum := 2
+	for tpsRows.Next() {
+		var tpsKode, tpsNama, kelNama, kecNama, kabNama string
+		var chartJSON sql.NullString
+
+		if err := tpsRows.Scan(&tpsKode, &tpsNama, &kelNama, &kecNama, &kabNama, &chartJSON); err != nil {
+			continue
+		}
+
+		// Parse chart data (vote counts per candidate)
+		var chart map[string]interface{}
+		voteData := make(map[string]*int)
+
+		if chartJSON.Valid && chartJSON.String != "" && chartJSON.String != "{\"null\":null}" {
+			if err := json.Unmarshal([]byte(chartJSON.String), &chart); err == nil {
+				for calegID := range calegMap {
+					if val, ok := chart[calegID]; ok && val != nil {
+						if v, ok := val.(float64); ok {
+							temp := int(v)
+							voteData[calegID] = &temp
+						}
+					}
+				}
+			}
+		}
+
+		// Write data row
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), rowNum-1)
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), kabNama)
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kecNama)
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kelNama)
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), tpsNama)
+
+		// Write vote counts for each candidate
+		for i, caleg := range calegList {
+			colNum := 6 + i
+			cell := fmt.Sprintf("%s%d", getColumnName(colNum), rowNum)
+
+			if vote, ok := voteData[caleg.ID]; ok && vote != nil {
+				f.SetCellValue(sheetName, cell, *vote)
+			} else {
+				f.SetCellStr(sheetName, cell, "-")
+			}
+		}
+
+		rowNum++
+	}
+
+	// Apply borders to all data cells
+	if rowNum > 2 {
+		dataStyle, _ := f.NewStyle(&excelize.Style{
+			Border: []excelize.Border{
+				{Type: "left", Color: "000000", Style: 1},
+				{Type: "top", Color: "000000", Style: 1},
+				{Type: "bottom", Color: "000000", Style: 1},
+				{Type: "right", Color: "000000", Style: 1},
+			},
+		})
+		lastRow := rowNum - 1
+		lastCol := getColumnName(5 + len(calegList))
+		f.SetCellStyle(sheetName, "A2", fmt.Sprintf("%s%d", lastCol, lastRow), dataStyle)
+	}
+
+	// Set response headers
+	cleanProNama := strings.ReplaceAll(proNama, "/", "-")
+	filename := fmt.Sprintf("DPD_TPS_%s.xlsx", cleanProNama)
+	c.Response().Header().Set("Content-Type", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")
+	c.Response().Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", filename))
+
+	return f.Write(c.Response().Writer)
+}
+
+// Helper function to get column name from column number (1-based)
+func getColumnName(colNum int) string {
+	colName, _ := excelize.ColumnNumberToName(colNum)
+	return colName
 }

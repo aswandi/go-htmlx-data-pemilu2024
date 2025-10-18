@@ -105,14 +105,12 @@ templ ProvincePage(provinces []models.Province) {
 									</td>
 									<td class="px-6 py-4 whitespace-nowrap text-center">
 										<div class="flex flex-wrap gap-1 justify-center">
-											<a href="#"
-											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
-											   title="Belum tersedia">
+											<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/pilpres/%s", prov.Code)) }
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors">
 												PILPRES
 											</a>
-											<a href="#"
-											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed"
-											   title="Belum tersedia">
+											<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dpd-tps/%s", prov.Code)) }
+											   class="inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors">
 												DPD
 											</a>
 											<a href={ templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-partai-tps/%s", prov.Code)) }

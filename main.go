@@ -57,8 +57,9 @@ func main() {
 	e.GET("/download/provinsi/dpr-ri-partai-tps/:code", dprDownloadHandler.DownloadProvinsiDPRRIPartaiTPS)
 	e.GET("/download/provinsi/dpr-ri-caleg/:code", dprDownloadHandler.DownloadProvinsiDPRRICaleg)
 	e.GET("/download/provinsi/dpr-ri-caleg-tps/:code", dprDownloadHandler.DownloadProvinsiDPRRICalegTPS)
-	e.GET("/download/provinsi/pilpres/:code", dprDownloadHandler.DownloadProvinsiPilpres)
+	e.GET("/download/provinsi/pilpres/:id", dprDownloadHandler.DownloadPilpresByProvince)
 	e.GET("/download/provinsi/dpd/:code", dprDownloadHandler.DownloadProvinsiDPD)
+	e.GET("/download/provinsi/dpd-tps/:id", dprDownloadHandler.DownloadDPDByProvinceTPS)
 	e.GET("/download/provinsi/dprd-prov-partai/:code", dprDownloadHandler.DownloadProvinsiDPRDProvPartai)
 	e.GET("/download/provinsi/dprd-prov-caleg/:code", dprDownloadHandler.DownloadProvinsiDPRDProvCaleg)
 	e.GET("/download/kabupaten/dpr-ri-partai-tps/:code", dprDownloadHandler.DownloadKabupatenDPRRIPartaiTPS)
@@ -71,6 +72,7 @@ func main() {
 	e.GET("/download/dapil/dpr-ri-caleg-tps/:code", dprDownloadHandler.DownloadDapilDPRRICalegTPS)
 	// DPRD Kabupaten download routes
 	e.GET("/download/dprd-kab-partai/:code", dprDownloadHandler.DownloadDPRDKabPartai)
+	e.GET("/download/dprd-kab-caleg/:id", dprDownloadHandler.DownloadDPRDKabCalegByProvince)
 
 	// Start server
 	log.Println("Server starting on :8080")

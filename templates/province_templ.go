@@ -246,51 +246,77 @@ func ProvincePage(provinces []models.Province) templ.Component {
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors\">DPRD PROV CALEG</a></div></td><td class=\"px-6 py-4 whitespace-nowrap text-center\"><div class=\"flex flex-wrap gap-1 justify-center\"><a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">PILPRES</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPD</a> <a href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 17, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-purple-600 hover:bg-purple-700 rounded transition-colors\">DPRD PROV CALEG</a></div></td><td class=\"px-6 py-4 whitespace-nowrap text-center\"><div class=\"flex flex-wrap gap-1 justify-center\"><a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var18 templ.SafeURL
-				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-partai-tps/%s", prov.Code)))
+				templ_7745c5c3_Var18, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/download/provinsi/pilpres/%s", prov.Code)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 118, Col: 101}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 108, Col: 91}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var18))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors\">DPR RI PARTAI</a> <a href=\"")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 18, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-red-600 hover:bg-red-700 rounded transition-colors\">PILPRES</a> <a href=\"")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 				var templ_7745c5c3_Var19 templ.SafeURL
-				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-caleg-tps/%s", prov.Code)))
+				templ_7745c5c3_Var19, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/download/provinsi/dpd-tps/%s", prov.Code)))
 				if templ_7745c5c3_Err != nil {
-					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 122, Col: 100}
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 112, Col: 91}
 				}
 				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var19))
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
-				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded transition-colors\">DPR RI CALEG</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD PROV PARTAI</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD PROV CALEG</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD KABKOTA PARTAI</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD KABKOTA CALEG</a></div></td></tr>")
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 19, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-blue-600 hover:bg-blue-700 rounded transition-colors\">DPD</a> <a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var20 templ.SafeURL
+				templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-partai-tps/%s", prov.Code)))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 116, Col: 101}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-green-600 hover:bg-green-700 rounded transition-colors\">DPR RI PARTAI</a> <a href=\"")
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				var templ_7745c5c3_Var21 templ.SafeURL
+				templ_7745c5c3_Var21, templ_7745c5c3_Err = templ.JoinURLErrs(templ.SafeURL(fmt.Sprintf("/download/provinsi/dpr-ri-caleg-tps/%s", prov.Code)))
+				if templ_7745c5c3_Err != nil {
+					return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 120, Col: 100}
+				}
+				_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var21))
+				if templ_7745c5c3_Err != nil {
+					return templ_7745c5c3_Err
+				}
+				templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-teal-600 hover:bg-teal-700 rounded transition-colors\">DPR RI CALEG</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD PROV PARTAI</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD PROV CALEG</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD KABKOTA PARTAI</a> <a href=\"#\" class=\"inline-flex items-center px-2 py-1 text-xs font-medium text-white bg-gray-400 rounded transition-colors cursor-not-allowed\" title=\"Belum tersedia\">DPRD KABKOTA CALEG</a></div></td></tr>")
 				if templ_7745c5c3_Err != nil {
 					return templ_7745c5c3_Err
 				}
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 20, "</tbody></table></div></div><div class=\"mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg\"><div class=\"flex\"><div class=\"flex-shrink-0\"><svg class=\"h-5 w-5 text-blue-500\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z\" clip-rule=\"evenodd\"></path></svg></div><div class=\"ml-3\"><p class=\"text-sm text-blue-700\"><strong>Total Provinsi:</strong> ")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 22, "</tbody></table></div></div><div class=\"mt-6 bg-blue-50 border-l-4 border-blue-500 p-4 rounded-lg\"><div class=\"flex\"><div class=\"flex-shrink-0\"><svg class=\"h-5 w-5 text-blue-500\" fill=\"currentColor\" viewBox=\"0 0 20 20\"><path fill-rule=\"evenodd\" d=\"M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z\" clip-rule=\"evenodd\"></path></svg></div><div class=\"ml-3\"><p class=\"text-sm text-blue-700\"><strong>Total Provinsi:</strong> ")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			var templ_7745c5c3_Var20 string
-			templ_7745c5c3_Var20, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d provinsi", len(provinces)))
+			var templ_7745c5c3_Var22 string
+			templ_7745c5c3_Var22, templ_7745c5c3_Err = templ.JoinStringErrs(fmt.Sprintf("%d provinsi", len(provinces)))
 			if templ_7745c5c3_Err != nil {
-				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 163, Col: 84}
+				return templ.Error{Err: templ_7745c5c3_Err, FileName: `templates/province.templ`, Line: 161, Col: 84}
 			}
-			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var20))
+			_, templ_7745c5c3_Err = templ_7745c5c3_Buffer.WriteString(templ.EscapeString(templ_7745c5c3_Var22))
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}
-			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 21, "</p></div></div></div></div>")
+			templ_7745c5c3_Err = templruntime.WriteString(templ_7745c5c3_Buffer, 23, "</p></div></div></div></div>")
 			if templ_7745c5c3_Err != nil {
 				return templ_7745c5c3_Err
 			}

@@ -8,6 +8,154 @@ templ ChangelogPage() {
 				<p class="text-gray-600">Riwayat perubahan dan pembaruan aplikasi Database Pemilu 2024</p>
 			</div>
 			<div class="space-y-6">
+				<!-- Version 1.8.0 -->
+				<div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover border-l-4 border-cyan-500">
+					<div class="p-6">
+						<div class="flex items-center justify-between mb-4">
+							<h3 class="text-xl font-bold text-gray-800">Version 1.8.0</h3>
+							<span class="px-3 py-1 bg-cyan-100 text-cyan-800 rounded-full text-sm font-medium">17 Oktober 2025</span>
+						</div>
+						<div class="space-y-2">
+							<h4 class="font-semibold text-gray-700">✨ Fitur Baru</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li><strong>Download DPRD Kabupaten Caleg per Provinsi (Multi-Sheet):</strong>
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li>Endpoint <code class="bg-gray-100 px-1 rounded">/download/dprd-kab-caleg/:id</code></li>
+										<li>1 file Excel per provinsi dengan sheet terpisah untuk setiap dapil</li>
+										<li>Data caleg per kecamatan dalam setiap dapil</li>
+										<li>Header: NO, Provinsi, Kode Prov, Dapil, Kode Dapil, Kab/Kota, Kode Kab, Kecamatan, Kode Kec</li>
+										<li>Kolom dinamis untuk setiap caleg dengan format: Nomor Urut. Nama Caleg</li>
+										<li>Kolom TOTAL untuk jumlah suara total per kecamatan</li>
+									</ul>
+								</li>
+								<li><strong>Download DPD per TPS:</strong>
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li>Endpoint <code class="bg-gray-100 px-1 rounded">/download/provinsi/dpd-tps/:id</code></li>
+										<li>Data suara DPD detail sampai level TPS per provinsi</li>
+										<li>Format Excel dengan kolom lengkap termasuk data per TPS</li>
+									</ul>
+								</li>
+								<li><strong>Perbaikan Endpoint Pilpres:</strong>
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li>URL diubah dari <code class="bg-gray-100 px-1 rounded">/download/provinsi/pilpres/:code</code></li>
+										<li>Menjadi <code class="bg-gray-100 px-1 rounded">/download/provinsi/pilpres/:id</code></li>
+										<li>Handler baru <code class="bg-gray-100 px-1 rounded">DownloadPilpresByProvince</code></li>
+									</ul>
+								</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">🔧 Peningkatan Teknis</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Multi-sheet Excel generation untuk data kompleks</li>
+								<li>Fungsi <code class="bg-gray-100 px-1 rounded">sanitizeSheetName()</code> untuk nama sheet yang valid (max 31 karakter)</li>
+								<li>Query optimasi untuk agregasi data per dapil dan kecamatan</li>
+								<li>Menggunakan tabel <code class="bg-gray-100 px-1 rounded">hr_dprd_kab_kec</code> untuk data DPRD Kabupaten</li>
+								<li>Style Excel konsisten: header biru dengan border dan text wrapping</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">📊 Struktur Data</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Setiap sheet mewakili 1 dapil DPRD Kabupaten</li>
+								<li>Data diorganisir per kecamatan dalam dapil</li>
+								<li>Caleg diurutkan berdasarkan nomor urut</li>
+								<li>Kolom lebar otomatis untuk kemudahan membaca</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+				<!-- Version 1.7.0 -->
+				<div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover border-l-4 border-pink-500">
+					<div class="p-6">
+						<div class="flex items-center justify-between mb-4">
+							<h3 class="text-xl font-bold text-gray-800">Version 1.7.0</h3>
+							<span class="px-3 py-1 bg-pink-100 text-pink-800 rounded-full text-sm font-medium">16 Oktober 2025</span>
+						</div>
+						<div class="space-y-2">
+							<h4 class="font-semibold text-gray-700">✨ Fitur Baru</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li><strong>Download Excel Data Suara DPR RI per Dapil:</strong>
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li><strong>Download suara partai per TPS</strong> - Endpoint <code class="bg-gray-100 px-1 rounded">/download/dapil/dpr-ri-partai-tps/:code</code></li>
+										<li><strong>Download suara caleg per TPS</strong> - Endpoint <code class="bg-gray-100 px-1 rounded">/download/dapil/dpr-ri-caleg-tps/:code</code></li>
+										<li>Data mencakup semua TPS di semua kabupaten dalam 1 dapil</li>
+										<li>Format Excel dengan kolom lengkap: Provinsi, Dapil, Kabupaten, Kecamatan, Kelurahan, TPS + data suara</li>
+									</ul>
+								</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">🔧 Peningkatan Teknis</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Menggunakan data dari tabel <code class="bg-gray-100 px-1 rounded">hr_dpr_ri_kel</code> untuk akurasi tinggi</li>
+								<li>Parsing JSON data suara per TPS dengan handling error yang lebih baik</li>
+								<li>Agregasi suara caleg menjadi suara partai</li>
+								<li>Format header Excel untuk caleg: Partai Singkat + Nomor Urut + Nama Caleg</li>
+								<li>Style Excel dengan header biru dan border pada semua cell</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">📊 Format Data</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li><strong>Partai per TPS:</strong> Kolom per partai + Total suara</li>
+								<li><strong>Caleg per TPS:</strong> Kolom per caleg + Total suara</li>
+								<li>Penanganan nilai "-" untuk TPS tanpa data</li>
+								<li>Penanganan nilai "0" untuk TPS dengan data tapi tidak ada suara</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+				<!-- Version 1.6.0 -->
+				<div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover border-l-4 border-emerald-500">
+					<div class="p-6">
+						<div class="flex items-center justify-between mb-4">
+							<h3 class="text-xl font-bold text-gray-800">Version 1.6.0</h3>
+							<span class="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">14 Oktober 2025</span>
+						</div>
+						<div class="space-y-2">
+							<h4 class="font-semibold text-gray-700">🚀 Optimasi Performa Database</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Perbaikan critical: CPU usage dari 181% menjadi ~10% (pengurangan 95%)</li>
+								<li>Eliminasi semua slow queries (1000-2000 detik → &lt;1 detik)</li>
+								<li>System load turun drastis dari 10.90 menjadi 0.76</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">🔧 Database Optimization</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Penambahan 40+ strategic indexes di seluruh tabel:
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li><strong>pdpr_wil_tps:</strong> 12 index baru (composite + single column)</li>
+										<li><strong>pdpr_wil_pro, kab, kec, kel, dapil:</strong> Index pada kolom kode & ID</li>
+										<li><strong>Candidate tables:</strong> Index untuk JOIN yang lebih cepat</li>
+									</ul>
+								</li>
+								<li>Total 27 indexes pada tabel pdpr_wil_tps (880K+ rows)</li>
+								<li>Composite indexes untuk optimasi query hierarchical</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">⚙️ MySQL Configuration Tuning</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>InnoDB Buffer Pool: 4GB (50% dari 8GB RAM)</li>
+								<li>Query execution timeout: 30 detik maksimal</li>
+								<li>Connection timeout settings</li>
+								<li>Memory optimization:
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li>tmp_table_size: 256MB</li>
+										<li>max_heap_table_size: 256MB</li>
+										<li>sort_buffer_size: 4MB</li>
+										<li>join_buffer_size: 4MB</li>
+									</ul>
+								</li>
+								<li>Table cache: 4000 tables, 2000 definitions</li>
+								<li>Max connections: 200</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">📊 Performance Impact</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Query performance: 1000-2000s → &lt;1s (peningkatan 1000x+)</li>
+								<li>CPU usage turun 95%</li>
+								<li>Sistem lebih stabil dan responsif</li>
+								<li>Memory management optimal untuk 8GB RAM</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">📝 Dokumentasi</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>OPTIMIZATION_REPORT.md - Laporan lengkap optimasi database</li>
+								<li>CHANGELOG.md - Dokumentasi perubahan versi</li>
+								<li>optimize_indexes_final.sql - Script SQL untuk index optimization</li>
+							</ul>
+						</div>
+					</div>
+				</div>
 				<!-- Version 1.5.0 -->
 				<div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover border-l-4 border-indigo-500">
 					<div class="p-6">
