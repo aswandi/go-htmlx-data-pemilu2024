@@ -16,7 +16,7 @@ func main() {
 		Host:     "127.0.0.1",
 		Port:     "3306",
 		Username: "root",
-		Password: "StrongPassword123!",
+		Password: "YOUR_DATABASE_PASSWORD", // TODO: Load from environment variable
 		Database: "pileg2024",
 	}
 
