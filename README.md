@@ -15,7 +15,6 @@ A web application for managing and displaying Indonesian election data (Pemilu 2
 - **Host**: 127.0.0.1:3306
 - **Database Name**: pileg2024
 - **Username**: root
-- **Password**: StrongPassword123!
 
 ## Data Structure & Architecture
 
