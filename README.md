@@ -1,8 +1,88 @@
-# go-htmlx-data-pemilu2024
+# Database Pemilu 2024
 
-A web application to manage and display Indonesian election data for 2024.
+A web application for managing and displaying Indonesian election data (Pemilu 2024) across all administrative levels.
 
-This project is built with Go, HTMX, and Tailwind CSS.
+## Tech Stack
+
+- Go
+- Templ
+- Tailwind CSS
+- HTMX
+
+## Database Configuration
+
+- **Database**: MySQL
+- **Host**: 127.0.0.1:3306
+- **Database Name**: pileg2024
+- **Username**: root
+- **Password**: StrongPassword123!
+
+## Data Structure & Architecture
+
+### Administrative Hierarchy Tables
+The database contains complete Indonesian administrative divisions with election data:
+
+- `pdpr_wil_pro` - Province level
+- `pdpr_wil_kab` - Regency/City level (Kabupaten/Kota)
+- `pdpr_wil_kec` - District level (Kecamatan)
+- `pdpr_wil_kel` - Village level (Kelurahan)
+- `pdpr_wil_dapil` - Electoral districts (Dapil)
+- `pdpr_wil_tps` - Polling stations (TPS)
+
+### Election Types & Levels
+
+1. **Presidential Election (Pilpres/PPWP)**: National → Province → Regency/City → District → Village → TPS
+2. **DPD (Regional Representatives)**: Provincial level, 4 representatives per province, voting down to TPS
+3. **DPR RI (National Parliament)**: Provincial dapil level, varies by province (1+ dapil per province)
+4. **DPRD Province**: Provincial dapil level, districts divided by regency boundaries
+5. **DPRD Regency/City**: Regency dapil level, districts divided by sub-district boundaries
+
+### Candidate Data Tables
+- `dpd_caleg` - DPD candidates
+- `dpr_ri_caleg` - DPR RI candidates
+- `dprd_pro_caleg` - Provincial DPRD candidates
+- `dprd_kab_caleg` - Regency/City DPRD candidates
+
+### Table Prefix Conventions
+- `hs_*` - Vote counting (hitung suara)
+- `hr_*` - Vote recapitulation (hitung rekapitulasi)
+- `pdpr_*` - DPR RI election
+- `pdprdp_*` - Provincial DPRD election
+- `pdprdk_*` - Aceh special DPRDK election only
+- `dprd_kab_*` - Regency/City DPRD
+- `pilpres_*` / `ppwp_*` - Presidential election
+- `*_wil_*` - Regional/administrative data
+- `*_nas` - National level
+- `*_pro` - Province level
+- `*_kab` - Regency level
+- `*_kec` - District level
+- `*_kel` - Village level
+- `*_dapil` - Electoral district
+- `*_tps` - Polling station
+
+## Development Commands
+
+```bash
+# Initialize Go module (if not done)
+go mod init datapemilu2024
+
+# Install dependencies
+go get github.com/a-h/templ
+go get github.com/go-sql-driver/mysql
+# ... other dependencies as needed
+
+# Generate templ files
+templ generate
+
+# Build Tailwind CSS
+npx tailwindcss -i ./input.css -o ./static/output.css --watch
+
+# Run application
+go run main.go
+
+# Build for production
+go build -o datapemilu2024
+```
 
 ## Changelog
 
@@ -335,7 +415,6 @@ VERSION 1.0.0
  * MySQL database connection
  * Repository pattern untuk data access
  * Nginx sebagai reverse proxy
- * Domain: datapemilu2024.aplikasiweb.my.id
 
 TENTANG APLIKASI
 
