@@ -397,9 +397,9 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 	}
 
 	// Get TPS count and DPT sum per kelurahan
-	tpsQuery := `SELECT kel_kode, COUNT(*) as jml_tps, SUM(COALESCE(total_dpt, 0)) as jml_dpt FROM pdpr_wil_tps WHERE kab_kode = ? GROUP BY kel_kode`
+	tpsQuery := `SELECT kel_kode, COUNT(*) as jml_tps, SUM(COALESCE(total_dpt, 0)) as jml_dpt FROM pdpr_wil_tps WHERE dapil_id = ? GROUP BY kel_kode`
 
-	tpsRows, err := h.db.Query(tpsQuery, kabKode)
+	tpsRows, err := h.db.Query(tpsQuery, dapilID)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error querying TPS data")
 	}
@@ -422,9 +422,9 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 	}
 
 	// Get vote data from hr_dpr_ri_kel (per TPS, need to aggregate per kelurahan)
-	voteDataQuery := `SELECT kel_kode, tbl, chart FROM hr_dpr_ri_kel WHERE kab_kode = ?`
+	voteDataQuery := `SELECT kel_kode, tbl, chart FROM hr_dpr_ri_kel WHERE dapil_id = ?`
 
-	voteRows, err := h.db.Query(voteDataQuery, kabKode)
+	voteRows, err := h.db.Query(voteDataQuery, dapilID)
 	if err != nil {
 		return c.String(http.StatusInternalServerError, "Error querying vote data")
 	}
@@ -529,11 +529,11 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 	f.SetActiveSheet(index)
 	f.DeleteSheet("Sheet1")
 
-	// Set header - format sederhana
+	// Set header - format standar
 	headers := []string{
-		"NO", "PROVINSI", "KODE PROV", "KAB/KOTA", "KODE KAB",
-		"KECAMATAN", "KODE KEC", "KELURAHAN/DESA", "KODE DESA",
-		"JUMLAH TPS", "DPT",
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
 	}
 
 	// Add party columns using short names
@@ -591,6 +591,16 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 		f.SetCellValue(sheetName, cell, kel.ProKode)
 		colNum++
 
+		// DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilName)
+		colNum++
+
+		// KODE DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.DapilKode)
+		colNum++
+
 		// KAB/KOTA
 		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		f.SetCellValue(sheetName, cell, kel.KabNama)
@@ -621,7 +631,7 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 		f.SetCellValue(sheetName, cell, kel.KelKode)
 		colNum++
 
-		// JUMLAH TPS
+		// TPS (jumlah TPS untuk data perdesa)
 		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		jmlTPS := 0
 		jmlDPT := 0
@@ -630,6 +640,11 @@ func (h *DPRDownloadHandler) DownloadDPRRIPartai(c echo.Context) error {
 			jmlDPT = tpsInfo.JmlDPT
 		}
 		f.SetCellValue(sheetName, cell, jmlTPS)
+		colNum++
+
+		// KODE TPS (kosong untuk data perdesa/kelurahan)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, "")
 		colNum++
 
 		// DPT
@@ -1033,12 +1048,11 @@ func (h *DPRDownloadHandler) DownloadDPRRICaleg(c echo.Context) error {
 	f.SetActiveSheet(index)
 	f.DeleteSheet("Sheet1")
 
-	// Fixed columns
+	// Fixed columns - format standar
 	fixedCols := []string{
-		"NO", "PRO_ID", "DAPIL_ID", "KAB_ID", "KEC_ID", "KEL_ID",
-		"PRO_KODE", "DAPIL_KODE", "KAB_KODE", "KEC_KODE", "KEL_KODE",
-		"PROVINSI", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN",
-		"JML_TPS", "JML_DPT",
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
 	}
 
 	// Calculate total columns
@@ -1138,85 +1152,80 @@ func (h *DPRDownloadHandler) DownloadDPRRICaleg(c echo.Context) error {
 	for idx, kel := range kelurahanList {
 		colNum := 1
 
-		// NO
-		cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, idx+1)
-		colNum++
-
-		// IDs
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.ProID)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.DapilID)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KabID)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KecID)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KelID)
-		colNum++
-
-		// Kodes
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.ProKode)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.DapilKode)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KabKode)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KecKode)
-		colNum++
-
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KelKode)
-		colNum++
-
-		// Provinsi
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, proName)
-		colNum++
-
-		// Kabupaten
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KabNama)
-		colNum++
-
-		// Kecamatan
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KecNama)
-		colNum++
-
-		// Kelurahan
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-		f.SetCellValue(sheetName, cell, kel.KelNama)
-		colNum++
-
-		// JML_TPS
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		// Get TPS and DPT data
 		jmlTPS := 0
 		jmlDPT := 0
 		if tpsInfo, exists := tpsData[kel.KelKode]; exists {
 			jmlTPS = tpsInfo.JmlTPS
 			jmlDPT = tpsInfo.JmlDPT
 		}
+
+		// NO
+		cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, idx+1)
+		colNum++
+
+		// PROVINSI
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proName)
+		colNum++
+
+		// KODE PROV
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.ProKode)
+		colNum++
+
+		// DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilName)
+		colNum++
+
+		// KODE DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.DapilKode)
+		colNum++
+
+		// KAB/KOTA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KabNama)
+		colNum++
+
+		// KODE KAB
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KabKode)
+		colNum++
+
+		// KECAMATAN
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KecNama)
+		colNum++
+
+		// KODE KEC
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KecKode)
+		colNum++
+
+		// KELURAHAN/DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KelNama)
+		colNum++
+
+		// KODE DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KelKode)
+		colNum++
+
+		// TPS (count)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		f.SetCellValue(sheetName, cell, jmlTPS)
 		colNum++
 
-		// JML_DPT
+		// KODE TPS (empty for perdesa)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, "")
+		colNum++
+
+		// DPT
 		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		f.SetCellValue(sheetName, cell, jmlDPT)
 		colNum++
@@ -1500,7 +1509,7 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRRIPartai(c echo.Context) error {
 	headers := []string{
 		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL", "KAB/KOTA", "KODE KAB",
 		"KECAMATAN", "KODE KEC", "KELURAHAN/DESA", "KODE DESA",
-		"JUMLAH TPS", "DPT",
+		"TPS", "KODE TPS", "DPT",
 	}
 
 	// Add party columns
@@ -1592,15 +1601,22 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRRIPartai(c echo.Context) error {
 		f.SetCellValue(sheetName, cell, kel.KelKode)
 		colNum++
 
-		// JUMLAH TPS
-		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		// TPS (count) and DPT
 		jmlTPS := 0
 		jmlDPT := 0
 		if tpsInfo, exists := tpsData[kel.KelKode]; exists {
 			jmlTPS = tpsInfo.JmlTPS
 			jmlDPT = tpsInfo.JmlDPT
 		}
+
+		// TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		f.SetCellValue(sheetName, cell, jmlTPS)
+		colNum++
+
+		// KODE TPS (empty for perdesa)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, "")
 		colNum++
 
 		// DPT
@@ -2647,10 +2663,9 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRRICaleg(c echo.Context) error {
 
 	// Fixed columns
 	fixedCols := []string{
-		"NO", "PRO_ID", "DAPIL_ID", "KAB_ID", "KEC_ID", "KEL_ID",
-		"PRO_KODE", "DAPIL_KODE", "KAB_KODE", "KEC_KODE", "KEL_KODE",
-		"PROVINSI", "DAPIL", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN",
-		"JML_TPS", "JML_DPT",
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
 	}
 
 	// Process each dapil
@@ -2802,80 +2817,80 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRRICaleg(c echo.Context) error {
 		for idx, kel := range dapilKelList {
 			colNum := 1
 
-			cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, idx+1)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.ProID)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.DapilID)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KabID)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KecID)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KelID)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.ProKode)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.DapilKode)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KabKode)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KecKode)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KelKode)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, proName)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.DapilNama)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KabNama)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KecNama)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
-			f.SetCellValue(sheetName, cell, kel.KelNama)
-			colNum++
-
-			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			// Get TPS and DPT data
 			jmlTPS := 0
 			jmlDPT := 0
 			if tpsInfo, exists := tpsData[kel.KelKode]; exists {
 				jmlTPS = tpsInfo.JmlTPS
 				jmlDPT = tpsInfo.JmlDPT
 			}
+
+			// NO
+			cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, idx+1)
+			colNum++
+
+			// PROVINSI
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, proName)
+			colNum++
+
+			// KODE PROV
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.ProKode)
+			colNum++
+
+			// DAPIL
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.DapilNama)
+			colNum++
+
+			// KODE DAPIL
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.DapilKode)
+			colNum++
+
+			// KAB/KOTA
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.KabNama)
+			colNum++
+
+			// KODE KAB
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.KabKode)
+			colNum++
+
+			// KECAMATAN
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.KecNama)
+			colNum++
+
+			// KODE KEC
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.KecKode)
+			colNum++
+
+			// KELURAHAN/DESA
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.KelNama)
+			colNum++
+
+			// KODE DESA
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, kel.KelKode)
+			colNum++
+
+			// TPS (count)
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 			f.SetCellValue(sheetName, cell, jmlTPS)
 			colNum++
 
+			// KODE TPS (empty for perdesa)
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+			f.SetCellValue(sheetName, cell, "")
+			colNum++
+
+			// DPT
 			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 			f.SetCellValue(sheetName, cell, jmlDPT)
 			colNum++
@@ -3864,15 +3879,24 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPD(c echo.Context) error {
 	}
 
 	// Get all kelurahan in this province with vote data
-	// Optimized query: join only necessary tables
+	// Join with pdpr_wil_kel to get dapil info
 	kelQuery := `
 		SELECT
-			k.kel_kode, k.kel_nama, k.kec_nama, k.kab_nama,
-			COALESCE(hr.chart, '{}') as chart
-		FROM ppwp_wil_kel k
-		LEFT JOIN hr_dpd_kel hr ON k.kel_kode = hr.kel_kode
-		WHERE k.pro_kode = ?
-		ORDER BY k.kab_nama, k.kec_nama, k.kel_nama
+			ppw.kel_kode, ppw.kel_nama,
+			ppw.kec_kode, ppw.kec_nama,
+			ppw.kab_kode, ppw.kab_nama,
+			COALESCE(pdr.dapil_kode, '') as dapil_kode,
+			COALESCE(d.dapil_nama, '') as dapil_nama,
+			COALESCE(ppw.tps_kode, '') as tps_kode,
+			COALESCE(ppw.tps_nama, '') as tps_nama,
+			COALESCE(hr.chart, '{}') as chart,
+			COALESCE(hr.administrasi, '{}') as administrasi
+		FROM ppwp_wil_kel ppw
+		LEFT JOIN pdpr_wil_kel pdr ON ppw.kel_kode = pdr.kel_kode
+		LEFT JOIN pdpr_wil_dapil d ON pdr.dapil_id = d.dapil_id AND pdr.kab_kode = '0'
+		LEFT JOIN hr_dpd_kel hr ON ppw.kel_kode = hr.kel_kode
+		WHERE ppw.pro_kode = ?
+		ORDER BY ppw.kab_nama, ppw.kec_nama, ppw.kel_nama
 	`
 
 	kelRows, err := h.db.Query(kelQuery, proCode)
@@ -3882,17 +3906,24 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPD(c echo.Context) error {
 	defer kelRows.Close()
 
 	type KelurahanData struct {
-		KelKode   string
-		KelNama   string
-		KecNama   string
-		KabNama   string
-		ChartJSON string
+		KelKode         string
+		KelNama         string
+		KecKode         string
+		KecNama         string
+		KabKode         string
+		KabNama         string
+		DapilKode       string
+		DapilNama       string
+		TPSKode         string
+		TPSNama         string
+		ChartJSON       string
+		AdministrasiJSON string
 	}
 
 	var kelurahanList []KelurahanData
 	for kelRows.Next() {
 		var k KelurahanData
-		if err := kelRows.Scan(&k.KelKode, &k.KelNama, &k.KecNama, &k.KabNama, &k.ChartJSON); err != nil {
+		if err := kelRows.Scan(&k.KelKode, &k.KelNama, &k.KecKode, &k.KecNama, &k.KabKode, &k.KabNama, &k.DapilKode, &k.DapilNama, &k.TPSKode, &k.TPSNama, &k.ChartJSON, &k.AdministrasiJSON); err != nil {
 			continue
 		}
 		kelurahanList = append(kelurahanList, k)
@@ -3935,9 +3966,11 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPD(c echo.Context) error {
 	f.SetActiveSheet(index)
 	f.DeleteSheet("Sheet1")
 
-	// Fixed columns
+	// Fixed columns - data per kelurahan
 	fixedCols := []string{
-		"NO", "PROVINSI", "KAB/KOTA", "KECAMATAN", "KELURAHAN/DESA", "KODE DESA",
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
 	}
 
 	// Calculate total columns
@@ -3981,10 +4014,10 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPD(c echo.Context) error {
 	// Set column widths
 	f.SetColWidth(sheetName, "A", "A", 5)
 	f.SetColWidth(sheetName, "B", "B", 20)
-	f.SetColWidth(sheetName, "C", "C", 20)
+	f.SetColWidth(sheetName, "C", "C", 12)
 	f.SetColWidth(sheetName, "D", "D", 20)
-	f.SetColWidth(sheetName, "E", "E", 25)
-	f.SetColWidth(sheetName, "F", "F", 15)
+	f.SetColWidth(sheetName, "E", "E", 12)
+	f.SetColWidth(sheetName, "F", "F", 20)
 	f.SetRowHeight(sheetName, 1, 35)
 
 	// Write data rows
@@ -4002,14 +4035,39 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPD(c echo.Context) error {
 		f.SetCellValue(sheetName, cell, proName)
 		colNum++
 
+		// KODE PROV
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proCode)
+		colNum++
+
+		// DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.DapilNama)
+		colNum++
+
+		// KODE DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.DapilKode)
+		colNum++
+
 		// KAB/KOTA
 		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		f.SetCellValue(sheetName, cell, kel.KabNama)
 		colNum++
 
+		// KODE KAB
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KabKode)
+		colNum++
+
 		// KECAMATAN
 		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		f.SetCellValue(sheetName, cell, kel.KecNama)
+		colNum++
+
+		// KODE KEC
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.KecKode)
 		colNum++
 
 		// KELURAHAN/DESA
@@ -4020,6 +4078,34 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPD(c echo.Context) error {
 		// KODE DESA
 		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		f.SetCellValue(sheetName, cell, kel.KelKode)
+		colNum++
+
+		// TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.TPSNama)
+		colNum++
+
+		// KODE TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kel.TPSKode)
+		colNum++
+
+		// Parse administrasi data for DPT
+		var dpt int
+		if kel.AdministrasiJSON != "" && kel.AdministrasiJSON != "{}" {
+			var administrasi map[string]interface{}
+			if err := json.Unmarshal([]byte(kel.AdministrasiJSON), &administrasi); err == nil {
+				if val, ok := administrasi["pemilih_dpt_j"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						dpt = int(v)
+					}
+				}
+			}
+		}
+
+		// DPT
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dpt)
 		colNum++
 
 		// Parse chart JSON: {"695637":41,"695638":35,...}
@@ -4333,7 +4419,7 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRDProvPartai(c echo.Context) erro
 	})
 
 	// Write headers
-	headers := []string{"NO", "KODE PROV", "KODE DAPIL", "KODE KAB", "KODE KEC", "KODE DESA", "DAPIL", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN/DESA", "JML TPS", "JML DPT"}
+	headers := []string{"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL", "KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC", "KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT"}
 	for _, partai := range partaiList {
 		headers = append(headers, partai.PartaiSingkat)
 	}
@@ -4346,47 +4432,52 @@ func (h *DPRDownloadHandler) DownloadProvinsiDPRDProvPartai(c echo.Context) erro
 
 	// Set column widths
 	f.SetColWidth(sheetName, "A", "A", 5)   // NO
-	f.SetColWidth(sheetName, "B", "B", 12)  // KODE PROV
-	f.SetColWidth(sheetName, "C", "C", 12)  // KODE DAPIL
-	f.SetColWidth(sheetName, "D", "D", 12)  // KODE KAB
-	f.SetColWidth(sheetName, "E", "E", 12)  // KODE KEC
-	f.SetColWidth(sheetName, "F", "F", 15)  // KODE DESA
-	f.SetColWidth(sheetName, "G", "G", 20)  // DAPIL
-	f.SetColWidth(sheetName, "H", "H", 25)  // KABUPATEN/KOTA
-	f.SetColWidth(sheetName, "I", "I", 25)  // KECAMATAN
+	f.SetColWidth(sheetName, "B", "B", 25)  // PROVINSI
+	f.SetColWidth(sheetName, "C", "C", 12)  // KODE PROV
+	f.SetColWidth(sheetName, "D", "D", 20)  // DAPIL
+	f.SetColWidth(sheetName, "E", "E", 12)  // KODE DAPIL
+	f.SetColWidth(sheetName, "F", "F", 25)  // KAB/KOTA
+	f.SetColWidth(sheetName, "G", "G", 12)  // KODE KAB
+	f.SetColWidth(sheetName, "H", "H", 25)  // KECAMATAN
+	f.SetColWidth(sheetName, "I", "I", 12)  // KODE KEC
 	f.SetColWidth(sheetName, "J", "J", 30)  // KELURAHAN/DESA
-	f.SetColWidth(sheetName, "K", "K", 10)  // JML TPS
-	f.SetColWidth(sheetName, "L", "L", 12)  // JML DPT
+	f.SetColWidth(sheetName, "K", "K", 12)  // KODE DESA
+	f.SetColWidth(sheetName, "L", "L", 10)  // TPS
+	f.SetColWidth(sheetName, "M", "M", 12)  // KODE TPS
+	f.SetColWidth(sheetName, "N", "N", 12)  // DPT
 	for i := 0; i < len(partaiList); i++ {
-		colName, _ := excelize.ColumnNumberToName(13 + i)
+		colName, _ := excelize.ColumnNumberToName(15 + i)
 		f.SetColWidth(sheetName, colName, colName, 12)
 	}
 
 	// Write data
 	rowNum := 2
 	for idx, kel := range kelurahanList {
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), idx+1)           // NO
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), kel.ProKode)     // KODE PROV
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kel.DapilKode)   // KODE DAPIL
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kel.KabKode)     // KODE KAB
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), kel.KecKode)     // KODE KEC
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), kel.KelKode)     // KODE DESA
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), kel.DapilNama)   // DAPIL
-		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), kel.KabNama)     // KABUPATEN/KOTA
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), kel.KecNama)     // KECAMATAN
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), kel.KelNama)     // KELURAHAN/DESA
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), idx+1)         // NO
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), proName)       // PROVINSI
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kel.ProKode)   // KODE PROV
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kel.DapilNama) // DAPIL
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), kel.DapilKode) // KODE DAPIL
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), kel.KabNama)   // KAB/KOTA
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), kel.KabKode)   // KODE KAB
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), kel.KecNama)   // KECAMATAN
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), kel.KecKode)   // KODE KEC
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), kel.KelNama)   // KELURAHAN/DESA
+		f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), kel.KelKode)   // KODE DESA
 
 		if tps, ok := tpsData[kel.KelKode]; ok {
-			f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), tps.JmlTPS)  // JML TPS
-			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), tps.JmlDPT)  // JML DPT
+			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), tps.JmlTPS) // TPS
+			f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), "")         // KODE TPS (empty for perdesa)
+			f.SetCellValue(sheetName, fmt.Sprintf("N%d", rowNum), tps.JmlDPT) // DPT
 		} else {
-			f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), 0)
 			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), 0)
+			f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), "")
+			f.SetCellValue(sheetName, fmt.Sprintf("N%d", rowNum), 0)
 		}
 
-		// Write party votes (starting from column M = 13)
+		// Write party votes (starting from column O = 15)
 		for i, partai := range partaiList {
-			col := 13 + i
+			col := 15 + i
 			cell, _ := excelize.CoordinatesToCellName(col, rowNum)
 			if partaiVotes, ok := partaiData[kel.KelKode]; ok {
 				if data, exists := partaiVotes[partai.NomorUrut]; exists {
@@ -6038,7 +6129,7 @@ func (h *DPRDownloadHandler) DownloadDPRDKabPartai(c echo.Context) error {
 	})
 
 	// Write headers
-	headers := []string{"NO", "KODE PROV", "KODE KAB", "KODE DAPIL", "KODE KEC", "KODE DESA", "KABUPATEN/KOTA", "DAPIL-DPRD-KAB", "KECAMATAN", "KELURAHAN/DESA", "JML_TPS", "JML_DPT"}
+	headers := []string{"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL", "KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC", "KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT"}
 	for _, partai := range partaiList {
 		headers = append(headers, partai.PartaiSingkat)
 	}
@@ -6051,47 +6142,52 @@ func (h *DPRDownloadHandler) DownloadDPRDKabPartai(c echo.Context) error {
 
 	// Set column widths
 	f.SetColWidth(sheetName, "A", "A", 5)   // NO
-	f.SetColWidth(sheetName, "B", "B", 12)  // KODE PROV
-	f.SetColWidth(sheetName, "C", "C", 12)  // KODE KAB
-	f.SetColWidth(sheetName, "D", "D", 12)  // KODE DAPIL
-	f.SetColWidth(sheetName, "E", "E", 12)  // KODE KEC
-	f.SetColWidth(sheetName, "F", "F", 15)  // KODE DESA
-	f.SetColWidth(sheetName, "G", "G", 25)  // KABUPATEN/KOTA
-	f.SetColWidth(sheetName, "H", "H", 20)  // DAPIL-DPRD-KAB
-	f.SetColWidth(sheetName, "I", "I", 25)  // KECAMATAN
+	f.SetColWidth(sheetName, "B", "B", 25)  // PROVINSI
+	f.SetColWidth(sheetName, "C", "C", 12)  // KODE PROV
+	f.SetColWidth(sheetName, "D", "D", 20)  // DAPIL
+	f.SetColWidth(sheetName, "E", "E", 12)  // KODE DAPIL
+	f.SetColWidth(sheetName, "F", "F", 25)  // KAB/KOTA
+	f.SetColWidth(sheetName, "G", "G", 12)  // KODE KAB
+	f.SetColWidth(sheetName, "H", "H", 25)  // KECAMATAN
+	f.SetColWidth(sheetName, "I", "I", 12)  // KODE KEC
 	f.SetColWidth(sheetName, "J", "J", 30)  // KELURAHAN/DESA
-	f.SetColWidth(sheetName, "K", "K", 10)  // JML TPS
-	f.SetColWidth(sheetName, "L", "L", 12)  // JML DPT
+	f.SetColWidth(sheetName, "K", "K", 12)  // KODE DESA
+	f.SetColWidth(sheetName, "L", "L", 10)  // TPS
+	f.SetColWidth(sheetName, "M", "M", 12)  // KODE TPS
+	f.SetColWidth(sheetName, "N", "N", 12)  // DPT
 	for i := 0; i < len(partaiList); i++ {
-		colName, _ := excelize.ColumnNumberToName(13 + i)
+		colName, _ := excelize.ColumnNumberToName(15 + i)
 		f.SetColWidth(sheetName, colName, colName, 12)
 	}
 
 	// Write data
 	rowNum := 2
 	for idx, kel := range kelurahanList {
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), idx+1)           // NO
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), kel.ProKode)     // KODE PROV
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kel.KabKode)     // KODE KAB
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kel.DapilKode)   // KODE DAPIL
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), kel.KecKode)     // KODE KEC
-		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), kel.KelKode)     // KODE DESA
-		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), kel.KabNama)     // KABUPATEN/KOTA
-		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), kel.DapilNama)   // DAPIL-DPRD-KAB
-		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), kel.KecNama)     // KECAMATAN
-		f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), kel.KelNama)     // KELURAHAN/DESA
+		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), idx+1)         // NO
+		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), proName)       // PROVINSI
+		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kel.ProKode)   // KODE PROV
+		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kel.DapilNama) // DAPIL
+		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), kel.DapilKode) // KODE DAPIL
+		f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), kel.KabNama)   // KAB/KOTA
+		f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), kel.KabKode)   // KODE KAB
+		f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), kel.KecNama)   // KECAMATAN
+		f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), kel.KecKode)   // KODE KEC
+		f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), kel.KelNama)   // KELURAHAN/DESA
+		f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), kel.KelKode)   // KODE DESA
 
 		if tps, ok := tpsData[kel.KelKode]; ok {
-			f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), tps.JmlTPS) // JML TPS
-			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), tps.JmlDPT) // JML DPT
+			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), tps.JmlTPS) // TPS
+			f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), "")         // KODE TPS (empty for perdesa)
+			f.SetCellValue(sheetName, fmt.Sprintf("N%d", rowNum), tps.JmlDPT) // DPT
 		} else {
-			f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), 0)
 			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), 0)
+			f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), "")
+			f.SetCellValue(sheetName, fmt.Sprintf("N%d", rowNum), 0)
 		}
 
-		// Write party votes (starting from column M = 13)
+		// Write party votes (starting from column O = 15)
 		for i, partai := range partaiList {
-			col := 13 + i
+			col := 15 + i
 			cell, _ := excelize.CoordinatesToCellName(col, rowNum)
 			if partaiVotes, ok := partaiData[kel.KelKode]; ok {
 				if data, exists := partaiVotes[partai.NomorUrut]; exists {
@@ -6145,11 +6241,15 @@ func (h *DPRDownloadHandler) DownloadPilpresByProvince(c echo.Context) error {
 	// Get all TPS data with vote counts from hs_pilpres_tps
 	tpsQuery := `
 		SELECT
-			tps_kode, tps_nama, kel_nama, kec_nama, kab_nama,
-			chart, administrasi
-		FROM hs_pilpres_tps
-		WHERE pro_kode = ?
-		ORDER BY kab_nama, kec_nama, kel_nama, tps_nama
+			t.tps_kode, t.tps_nama,
+			t.kel_kode, t.kel_nama,
+			t.kec_kode, t.kec_nama,
+			t.kab_kode, t.kab_nama,
+			t.dapil_kode, t.dapil_nama,
+			t.chart, t.administrasi
+		FROM hs_pilpres_tps t
+		WHERE t.pro_kode = ?
+		ORDER BY t.kab_nama, t.kec_nama, t.kel_nama, t.tps_nama
 	`
 
 	tpsRows, err := h.db.Query(tpsQuery, proKode)
@@ -6178,9 +6278,11 @@ func (h *DPRDownloadHandler) DownloadPilpresByProvince(c echo.Context) error {
 
 	// Set headers
 	headers := []string{
-		"NO", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN/DESA", "TPS",
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
 		"ANIES-MUHAIMIN", "PRABOWO-GIBRAN", "GANJAR-MAHFUD",
-		"DPT", "PENGGUNA HAK PILIH", "SUARA SAH", "SUARA TIDAK SAH", "TOTAL SUARA",
+		"PENGGUNA HAK PILIH", "SUARA SAH", "SUARA TIDAK SAH", "TOTAL SUARA",
 	}
 
 	for i, header := range headers {
@@ -6200,10 +6302,10 @@ func (h *DPRDownloadHandler) DownloadPilpresByProvince(c echo.Context) error {
 
 	rowNum := 2
 	for tpsRows.Next() {
-		var tpsKode, tpsNama, kelNama, kecNama, kabNama string
+		var tpsKode, tpsNama, kelKode, kelNama, kecKode, kecNama, kabKode, kabNama, dapilKode, dapilNama string
 		var chartJSON, administrasiJSON sql.NullString
 
-		if err := tpsRows.Scan(&tpsKode, &tpsNama, &kelNama, &kecNama, &kabNama, &chartJSON, &administrasiJSON); err != nil {
+		if err := tpsRows.Scan(&tpsKode, &tpsNama, &kelKode, &kelNama, &kecKode, &kecNama, &kabKode, &kabNama, &dapilKode, &dapilNama, &chartJSON, &administrasiJSON); err != nil {
 			continue
 		}
 
@@ -6272,54 +6374,141 @@ func (h *DPRDownloadHandler) DownloadPilpresByProvince(c echo.Context) error {
 		}
 
 		// Write data row
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), rowNum-1)
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), kabNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kecNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kelNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), tpsNama)
+		colNum := 1
+		// NO
+		cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, rowNum-1)
+		colNum++
 
-		// Set vote counts - show "-" if no data, or the actual value (including 0)
-		if paslon1 != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("F%d", rowNum), *paslon1)
-		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("F%d", rowNum), "-")
-		}
-		if paslon2 != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("G%d", rowNum), *paslon2)
-		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("G%d", rowNum), "-")
-		}
-		if paslon3 != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("H%d", rowNum), *paslon3)
-		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("H%d", rowNum), "-")
-		}
+		// PROVINSI
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proNama)
+		colNum++
 
-		// Set administrative data - show "-" if no data, or the actual value (including 0)
+		// KODE PROV
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proKode)
+		colNum++
+
+		// DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilNama)
+		colNum++
+
+		// KODE DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilKode)
+		colNum++
+
+		// KAB/KOTA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kabNama)
+		colNum++
+
+		// KODE KAB
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kabKode)
+		colNum++
+
+		// KECAMATAN
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kecNama)
+		colNum++
+
+		// KODE KEC
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kecKode)
+		colNum++
+
+		// KELURAHAN/DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kelNama)
+		colNum++
+
+		// KODE DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kelKode)
+		colNum++
+
+		// TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tpsNama)
+		colNum++
+
+		// KODE TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tpsKode)
+		colNum++
+
+		// DPT - show "-" if no data, or the actual value (including 0)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		if dpt != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("I%d", rowNum), *dpt)
+			f.SetCellValue(sheetName, cell, *dpt)
 		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("I%d", rowNum), "-")
+			f.SetCellStr(sheetName, cell, "-")
 		}
+		colNum++
+
+		// ANIES-MUHAIMIN (Paslon 1)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		if paslon1 != nil {
+			f.SetCellValue(sheetName, cell, *paslon1)
+		} else {
+			f.SetCellStr(sheetName, cell, "-")
+		}
+		colNum++
+
+		// PRABOWO-GIBRAN (Paslon 2)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		if paslon2 != nil {
+			f.SetCellValue(sheetName, cell, *paslon2)
+		} else {
+			f.SetCellStr(sheetName, cell, "-")
+		}
+		colNum++
+
+		// GANJAR-MAHFUD (Paslon 3)
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		if paslon3 != nil {
+			f.SetCellValue(sheetName, cell, *paslon3)
+		} else {
+			f.SetCellStr(sheetName, cell, "-")
+		}
+		colNum++
+
+		// PENGGUNA HAK PILIH
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		if penggunaHakPilih != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("J%d", rowNum), *penggunaHakPilih)
+			f.SetCellValue(sheetName, cell, *penggunaHakPilih)
 		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("J%d", rowNum), "-")
+			f.SetCellStr(sheetName, cell, "-")
 		}
+		colNum++
+
+		// SUARA SAH
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		if suaraSah != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("K%d", rowNum), *suaraSah)
+			f.SetCellValue(sheetName, cell, *suaraSah)
 		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("K%d", rowNum), "-")
+			f.SetCellStr(sheetName, cell, "-")
 		}
+		colNum++
+
+		// SUARA TIDAK SAH
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		if suaraTidakSah != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("L%d", rowNum), *suaraTidakSah)
+			f.SetCellValue(sheetName, cell, *suaraTidakSah)
 		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("L%d", rowNum), "-")
+			f.SetCellStr(sheetName, cell, "-")
 		}
+		colNum++
+
+		// TOTAL SUARA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 		if totalSuara != nil {
-			f.SetCellValue(sheetName, fmt.Sprintf("M%d", rowNum), *totalSuara)
+			f.SetCellValue(sheetName, cell, *totalSuara)
 		} else {
-			f.SetCellStr(sheetName, fmt.Sprintf("M%d", rowNum), "-")
+			f.SetCellStr(sheetName, cell, "-")
 		}
 
 		rowNum++
@@ -6396,10 +6585,15 @@ func (h *DPRDownloadHandler) DownloadDPDByProvinceTPS(c echo.Context) error {
 	// Get all TPS data with vote counts from hs_dpd_tps
 	tpsQuery := `
 		SELECT
-			tps_kode, tps_nama, kel_nama, kec_nama, kab_nama, chart
-		FROM hs_dpd_tps
-		WHERE pro_kode = ?
-		ORDER BY kab_nama, kec_nama, kel_nama, tps_nama
+			t.tps_kode, t.tps_nama,
+			t.kel_kode, t.kel_nama,
+			t.kec_kode, t.kec_nama,
+			t.kab_kode, t.kab_nama,
+			t.dapil_kode, t.dapil_nama,
+			t.chart, t.administrasi
+		FROM hs_dpd_tps t
+		WHERE t.pro_kode = ?
+		ORDER BY t.kab_nama, t.kec_nama, t.kel_nama, t.tps_nama
 	`
 
 	tpsRows, err := h.db.Query(tpsQuery, proKode)
@@ -6426,8 +6620,12 @@ func (h *DPRDownloadHandler) DownloadDPDByProvinceTPS(c echo.Context) error {
 		},
 	})
 
-	// Set headers - first row: NO, location columns, then candidate names
-	headers := []string{"NO", "KABUPATEN/KOTA", "KECAMATAN", "KELURAHAN/DESA", "TPS"}
+	// Set headers - first row: NO, location columns, DPT, then candidate names
+	headers := []string{
+		"NO", "PROVINSI", "KODE PROV", "DAPIL", "KODE DAPIL",
+		"KAB/KOTA", "KODE KAB", "KECAMATAN", "KODE KEC",
+		"KELURAHAN/DESA", "KODE DESA", "TPS", "KODE TPS", "DPT",
+	}
 
 	// Add candidate headers (Nomor Urut - Nama)
 	for _, caleg := range calegList {
@@ -6458,10 +6656,10 @@ func (h *DPRDownloadHandler) DownloadDPDByProvinceTPS(c echo.Context) error {
 
 	rowNum := 2
 	for tpsRows.Next() {
-		var tpsKode, tpsNama, kelNama, kecNama, kabNama string
-		var chartJSON sql.NullString
+		var tpsKode, tpsNama, kelKode, kelNama, kecKode, kecNama, kabKode, kabNama, dapilKode, dapilNama string
+		var chartJSON, administrasiJSON sql.NullString
 
-		if err := tpsRows.Scan(&tpsKode, &tpsNama, &kelNama, &kecNama, &kabNama, &chartJSON); err != nil {
+		if err := tpsRows.Scan(&tpsKode, &tpsNama, &kelKode, &kelNama, &kecKode, &kecNama, &kabKode, &kabNama, &dapilKode, &dapilNama, &chartJSON, &administrasiJSON); err != nil {
 			continue
 		}
 
@@ -6482,23 +6680,105 @@ func (h *DPRDownloadHandler) DownloadDPDByProvinceTPS(c echo.Context) error {
 			}
 		}
 
+		// Parse administrasi data for DPT
+		var administrasi map[string]interface{}
+		var dpt *int
+		if administrasiJSON.Valid && administrasiJSON.String != "" {
+			if err := json.Unmarshal([]byte(administrasiJSON.String), &administrasi); err == nil {
+				if val, ok := administrasi["pemilih_dpt_j"]; ok && val != nil {
+					if v, ok := val.(float64); ok {
+						temp := int(v)
+						dpt = &temp
+					}
+				}
+			}
+		}
+
 		// Write data row
-		f.SetCellValue(sheetName, fmt.Sprintf("A%d", rowNum), rowNum-1)
-		f.SetCellValue(sheetName, fmt.Sprintf("B%d", rowNum), kabNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("C%d", rowNum), kecNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("D%d", rowNum), kelNama)
-		f.SetCellValue(sheetName, fmt.Sprintf("E%d", rowNum), tpsNama)
+		colNum := 1
+		// NO
+		cell, _ := excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, rowNum-1)
+		colNum++
+
+		// PROVINSI
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proNama)
+		colNum++
+
+		// KODE PROV
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, proKode)
+		colNum++
+
+		// DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilNama)
+		colNum++
+
+		// KODE DAPIL
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, dapilKode)
+		colNum++
+
+		// KAB/KOTA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kabNama)
+		colNum++
+
+		// KODE KAB
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kabKode)
+		colNum++
+
+		// KECAMATAN
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kecNama)
+		colNum++
+
+		// KODE KEC
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kecKode)
+		colNum++
+
+		// KELURAHAN/DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kelNama)
+		colNum++
+
+		// KODE DESA
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, kelKode)
+		colNum++
+
+		// TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tpsNama)
+		colNum++
+
+		// KODE TPS
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		f.SetCellValue(sheetName, cell, tpsKode)
+		colNum++
+
+		// DPT
+		cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
+		if dpt != nil {
+			f.SetCellValue(sheetName, cell, *dpt)
+		} else {
+			f.SetCellStr(sheetName, cell, "-")
+		}
+		colNum++
 
 		// Write vote counts for each candidate
-		for i, caleg := range calegList {
-			colNum := 6 + i
-			cell := fmt.Sprintf("%s%d", getColumnName(colNum), rowNum)
-
+		for _, caleg := range calegList {
+			cell, _ = excelize.CoordinatesToCellName(colNum, rowNum)
 			if vote, ok := voteData[caleg.ID]; ok && vote != nil {
 				f.SetCellValue(sheetName, cell, *vote)
 			} else {
 				f.SetCellStr(sheetName, cell, "-")
 			}
+			colNum++
 		}
 
 		rowNum++

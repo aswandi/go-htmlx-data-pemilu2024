@@ -8,6 +8,89 @@ templ ChangelogPage() {
 				<p class="text-gray-600">Riwayat perubahan dan pembaruan aplikasi Database Pemilu 2024</p>
 			</div>
 			<div class="space-y-6">
+				<!-- Version 1.10.0 -->
+				<div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover border-l-4 border-red-500">
+					<div class="p-6">
+						<div class="flex items-center justify-between mb-4">
+							<h3 class="text-xl font-bold text-gray-800">Version 1.10.0</h3>
+							<span class="px-3 py-1 bg-red-100 text-red-800 rounded-full text-sm font-medium">18 Oktober 2025</span>
+						</div>
+						<div class="space-y-2">
+							<h4 class="font-semibold text-gray-700">🐛 Perbaikan Critical Bug</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li><strong>Fix Download DPR RI Partai per Dapil:</strong>
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li>Memperbaiki masalah data TPS, DPT, dan suara partai yang menjadi 0 atau kosong</li>
+										<li>Root cause: Query menggunakan <code class="bg-gray-100 px-1 rounded">kab_kode</code> hanya mengambil data kabupaten pertama dalam dapil</li>
+										<li>Solusi: Mengubah query untuk menggunakan <code class="bg-gray-100 px-1 rounded">dapil_id</code> agar mencakup seluruh kabupaten dalam dapil</li>
+									</ul>
+								</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">🔧 Perubahan Teknis</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>File: <code class="bg-gray-100 px-1 rounded">internal/handlers/dpr_download_handler.go</code></li>
+								<li>Fungsi: <code class="bg-gray-100 px-1 rounded">DownloadDPRRIPartai()</code></li>
+								<li>Baris 400: Query TPS menggunakan <code class="bg-gray-100 px-1 rounded">WHERE dapil_id = ?</code> (sebelumnya <code class="bg-gray-100 px-1 rounded">WHERE kab_kode = ?</code>)</li>
+								<li>Baris 425: Query vote data menggunakan <code class="bg-gray-100 px-1 rounded">WHERE dapil_id = ?</code> (sebelumnya <code class="bg-gray-100 px-1 rounded">WHERE kab_kode = ?</code>)</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">✅ Hasil Perbaikan</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Data TPS per kelurahan kini terisi dengan benar</li>
+								<li>Data DPT (Daftar Pemilih Tetap) kini akurat</li>
+								<li>Suara partai untuk semua kabupaten dalam dapil kini lengkap</li>
+								<li>Endpoint: <code class="bg-gray-100 px-1 rounded">/download/dapil/dpr-ri-partai/:code</code></li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">📊 Contoh Kasus</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Dapil 1101 (ACEH I) sebelumnya menampilkan TPS dan DPT = 0</li>
+								<li>Setelah perbaikan: 8,478 TPS dengan data lengkap di semua 3,648 kelurahan</li>
+								<li>File Excel berukuran 423KB dengan 3,649 baris data</li>
+							</ul>
+						</div>
+					</div>
+				</div>
+				<!-- Version 1.9.0 -->
+				<div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover border-l-4 border-emerald-500">
+					<div class="p-6">
+						<div class="flex items-center justify-between mb-4">
+							<h3 class="text-xl font-bold text-gray-800">Version 1.9.0</h3>
+							<span class="px-3 py-1 bg-emerald-100 text-emerald-800 rounded-full text-sm font-medium">18 Oktober 2025</span>
+						</div>
+						<div class="space-y-2">
+							<h4 class="font-semibold text-gray-700">🔧 Perbaikan Format Excel</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li><strong>Standardisasi Kolom Download Data TPS:</strong>
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li>Semua download data TPS level provinsi kini memiliki format kolom yang konsisten</li>
+										<li>Format standar: <code class="bg-gray-100 px-1 rounded">NO, PROVINSI, KODE PROV, DAPIL, KODE DAPIL, KAB/KOTA, KODE KAB, KECAMATAN, KODE KEC, KELURAHAN/DESA, KODE DESA, TPS, KODE TPS, DPT</code></li>
+										<li>Berlaku untuk: Pilpres, DPD TPS, DPR RI Caleg TPS</li>
+									</ul>
+								</li>
+								<li><strong>Perbaikan Download Data Perdesa (DPD):</strong>
+									<ul class="list-circle list-inside ml-6 mt-1">
+										<li>Update query untuk join dengan tabel <code class="bg-gray-100 px-1 rounded">pdpr_wil_kel</code> dan <code class="bg-gray-100 px-1 rounded">pdpr_wil_dapil</code></li>
+										<li>Menambahkan kolom DAPIL dan KODE DAPIL dari relasi tabel DPR RI</li>
+										<li>Menambahkan kolom TPS dan KODE TPS untuk detail data</li>
+										<li>Format: <code class="bg-gray-100 px-1 rounded">NO, PROVINSI, KODE PROV, DAPIL, KODE DAPIL, KAB/KOTA, KODE KAB, KECAMATAN, KODE KEC, KELURAHAN/DESA, KODE DESA, TPS, KODE TPS, DPT</code></li>
+									</ul>
+								</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">📊 Peningkatan Data</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li>Parsing DPT dari field <code class="bg-gray-100 px-1 rounded">administrasi</code> JSON (pemilih_dpt_j)</li>
+								<li>Data dapil diambil dari relasi dengan tabel DPR RI untuk akurasi</li>
+								<li>Handling kosong/null untuk kolom dapil dan TPS</li>
+							</ul>
+							<h4 class="font-semibold text-gray-700 mt-4">🎯 Endpoint yang Diperbaiki</h4>
+							<ul class="list-disc list-inside text-gray-600 space-y-1 ml-4">
+								<li><code class="bg-gray-100 px-1 rounded">/download/provinsi/pilpres/:id</code> - Format kolom distandarisasi</li>
+								<li><code class="bg-gray-100 px-1 rounded">/download/provinsi/dpd-tps/:id</code> - Format kolom distandarisasi</li>
+								<li><code class="bg-gray-100 px-1 rounded">/download/provinsi/dpr-ri-caleg-tps/:code</code> - Format kolom distandarisasi</li>
+								<li><code class="bg-gray-100 px-1 rounded">/download/provinsi/dpd/:code</code> - Menambahkan kolom dapil dan TPS</li>
+							</ul>
+						</div>
+					</div>
+				</div>
 				<!-- Version 1.8.0 -->
 				<div class="bg-white rounded-xl shadow-lg overflow-hidden card-hover border-l-4 border-cyan-500">
 					<div class="p-6">
